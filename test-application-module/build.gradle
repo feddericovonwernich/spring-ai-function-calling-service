@@ -1,0 +1,35 @@
+plugins {
+	//id 'java'
+	id 'java'
+	id 'org.springframework.boot' version '3.3.0'
+	id 'io.spring.dependency-management' version '1.1.5'
+}
+
+group = 'io.github.feddericovonwernich'
+version = '0.0.1-SNAPSHOT'
+
+java {
+	toolchain {
+		languageVersion = JavaLanguageVersion.of(21)
+	}
+}
+
+repositories {
+	mavenCentral()
+}
+
+dependencies {
+	// Spring initializer ones.
+	implementation 'org.springframework.boot:spring-boot-starter'
+	testImplementation 'org.springframework.boot:spring-boot-starter-test'
+	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+
+	implementation project(":spring-ai-function-calling-service")
+
+	// https://mvnrepository.com/artifact/com.theokanning.openai-gpt3-java/service
+	implementation group: 'com.theokanning.openai-gpt3-java', name: 'service', version: '0.18.2'
+}
+
+tasks.named('test') {
+	useJUnitPlatform()
+}

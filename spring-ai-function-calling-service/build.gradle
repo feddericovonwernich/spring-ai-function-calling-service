@@ -1,0 +1,104 @@
+plugins {
+	id 'java-library'
+	id 'maven-publish'
+	id 'org.jreleaser' version '1.12.0'
+}
+
+group = 'io.github.feddericovonwernich'
+version = '0.0.1-SNAPSHOT'
+
+java {
+	toolchain {
+		languageVersion = JavaLanguageVersion.of(21)
+	}
+}
+
+repositories {
+	mavenCentral()
+}
+
+dependencies {
+
+	// https://mvnrepository.com/artifact/org.springframework.boot/spring-boot
+	implementation group: 'org.springframework.boot', name: 'spring-boot', version: '3.3.1'
+
+	// https://mvnrepository.com/artifact/org.springframework.boot/spring-boot-autoconfigure
+	implementation group: 'org.springframework.boot', name: 'spring-boot-autoconfigure', version: '3.3.1'
+
+	// https://mvnrepository.com/artifact/jakarta.annotation/jakarta.annotation-api
+	implementation group: 'jakarta.annotation', name: 'jakarta.annotation-api', version: '3.0.0'
+
+	// https://mvnrepository.com/artifact/org.slf4j/slf4j-api
+	implementation group: 'org.slf4j', name: 'slf4j-api', version: '2.0.13'
+
+	// https://mvnrepository.com/artifact/com.theokanning.openai-gpt3-java/service
+	api group: 'com.theokanning.openai-gpt3-java', name: 'service', version: '0.18.2'
+
+	// https://mvnrepository.com/artifact/com.google.code.gson/gson
+	implementation group: 'com.google.code.gson', name: 'gson', version: '2.10.1'
+}
+
+tasks.named('test') {
+	useJUnitPlatform()
+}
+
+jar {
+	manifest {
+		attributes(
+				'Implementation-Title': 'Spring AI function calling service.',
+				'Implementation-Version': version
+		)
+	}
+}
+
+java {
+	withSourcesJar()
+	withJavadocJar()
+}
+
+publishing {
+	publications {
+		maven(MavenPublication) {
+			groupId = 'io.github.feddericovonwernich'
+			artifactId = 'spring-ai-function-calling-service'
+
+			from components.java
+
+			pom {
+				name = 'Spring AI Function Calling Service'
+				description = 'Function calling implemented with annotations.'
+				url = 'https://github.com/Fedderico-von-Wernich/spring-ai-function-calling-service'
+				inceptionYear = '2024'
+				licenses {
+					license {
+						name = 'Apache-2.0'
+						url = 'https://spdx.org/licenses/Apache-2.0.html'
+					}
+				}
+				developers {
+					developer {
+						id = 'Federico von Wernich'
+						name = 'Federico von Wernich'
+					}
+				}
+				scm {
+					connection = 'scm:git:https://github.com/Fedderico-von-Wernich/spring-ai-function-calling-service.git'
+					developerConnection = 'scm:git:ssh://github.com/Fedderico-von-Wernich/spring-ai-function-calling-service.git'
+					url = 'http://github.com/Fedderico-von-Wernich/spring-ai-function-calling-service'
+				}
+			}
+		}
+	}
+
+	repositories {
+		maven {
+			url = layout.buildDirectory.dir('staging-deploy')
+		}
+	}
+}
+
+jreleaser {
+	configFile(projectDir.getAbsolutePath() + "/jreleaser.yml")
+	setGitRootSearch(true)
+
+}
