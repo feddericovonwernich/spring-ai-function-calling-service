@@ -1,0 +1,27 @@
+name: Release to Maven Central
+on:
+  release:
+    types: [prereleased, released]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'adopt'
+          java-version: '21'
+
+      - name: Build with Gradle
+        run: ./gradlew build
+
+      - name: Create staging deploy
+        run: ./gradlew publish
+
+      - name: Deploy to Maven Central
+        run: ./gradlew spring-ai-function-calling-service:jreleaserChecksum spring-ai-function-calling-service:jreleaserSign  spring-ai-function-calling-service:jreleaserDeploy -PjreleaserConfigFile=jreleaserDeployment.yml

@@ -1,0 +1,25 @@
+name: Create Draft-Release
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  create-pre-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up JDK
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'adopt'
+          java-version: '21'
+
+      - name: Build with Gradle
+        run: ./gradlew build
+
+      - name: Create Draft.
+        run: ./gradlew spring-ai-function-calling-service:jreleaserRelease -PjreleaserConfigFile=jreleaserDraftToGithub.yml

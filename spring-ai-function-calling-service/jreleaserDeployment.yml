@@ -1,0 +1,31 @@
+project:
+  name: spring-ai-function-calling-service
+  description: Function calling implemented with annotations.
+  links:
+    homepage: https://github.com/feddericovonwernich/spring-ai-function-calling-service
+  copyright: 'Copyright © 2024 Federico von Wernich'
+  license: Apache-2.0
+  authors:
+    - Federico von Wernich
+
+deploy:
+  maven:
+    nexus2:
+      maven-central:
+        active: ALWAYS
+        url: https://s01.oss.sonatype.org/service/local
+        snapshotUrl: https://s01.oss.sonatype.org/content/repositories/snapshots/
+        closeRepository: true
+        releaseRepository: false
+        stagingRepositories:
+          - build/staging-deploy
+
+signing:
+  mode: FILE
+  active: ALWAYS
+  armored: true
+
+files:
+  active: ALWAYS
+  artifacts:
+    - path: build/libs/spring-ai-function-calling-service-{{projectVersion}}.jar

@@ -1,0 +1,27 @@
+project:
+  name: spring-ai-function-calling-service
+  description: Function calling implemented with annotations.
+  links:
+    homepage: https://github.com/feddericovonwernich/spring-ai-function-calling-service
+  copyright: 'Copyright © 2024 Federico von Wernich'
+  license: Apache-2.0
+  authors:
+    - Federico von Wernich
+
+release:
+  github:
+    releaseName: Release v{{projectVersion}}
+    owner: feddericovonwernich
+    sign: true
+    overwrite: true
+    draft: true
+
+signing:
+  mode: FILE
+  active: ALWAYS
+  armored: true
+
+files:
+  active: ALWAYS
+  artifacts:
+    - path: build/libs/spring-ai-function-calling-service-{{projectVersion}}.jar
