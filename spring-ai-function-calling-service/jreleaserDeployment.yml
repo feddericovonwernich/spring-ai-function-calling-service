@@ -21,7 +21,6 @@ deploy:
           - build/staging-deploy
 
 signing:
-  mode: FILE
   active: ALWAYS
   armored: true
 
