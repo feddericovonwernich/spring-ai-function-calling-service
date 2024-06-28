@@ -15,6 +15,10 @@ release:
     sign: true
     overwrite: true
     draft: true
+    prerelease:
+      enabled: true
+      pattern: .*-SNAPSHOT
+    tagName: v{{projectVersion}}
 
 signing:
   active: ALWAYS
