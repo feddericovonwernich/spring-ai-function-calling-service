@@ -67,7 +67,7 @@ publishing {
 			pom {
 				name = 'Spring AI Function Calling Service'
 				description = 'Function calling implemented with annotations.'
-				url = 'https://github.com/Fedderico-von-Wernich/spring-ai-function-calling-service'
+				url = 'https://github.com/feddericovonwernich/spring-ai-function-calling-service'
 				inceptionYear = '2024'
 				licenses {
 					license {
@@ -82,9 +82,9 @@ publishing {
 					}
 				}
 				scm {
-					connection = 'scm:git:https://github.com/Fedderico-von-Wernich/spring-ai-function-calling-service.git'
-					developerConnection = 'scm:git:ssh://github.com/Fedderico-von-Wernich/spring-ai-function-calling-service.git'
-					url = 'http://github.com/Fedderico-von-Wernich/spring-ai-function-calling-service'
+					connection = 'scm:git:https://github.com/feddericovonwernich/spring-ai-function-calling-service.git'
+					developerConnection = 'scm:git:ssh://github.com/feddericovonwernich/spring-ai-function-calling-service.git'
+					url = 'http://github.com/feddericovonwernich/spring-ai-function-calling-service'
 				}
 			}
 		}
@@ -97,8 +97,14 @@ publishing {
 	}
 }
 
-jreleaser {
-	configFile(projectDir.getAbsolutePath() + "/jreleaser.yml")
-	setGitRootSearch(true)
+// Define the default value for jreleaserConfigFile
+def defaultJreleaserConfigFile = 'jreleaserDraftToGithub.yml'
 
+// Use the value from gradle.properties or fall back to the default
+def jreleaserConfigFile = project.findProperty('jreleaserConfigFile') ?: defaultJreleaserConfigFile
+
+
+jreleaser {
+	configFile(projectDir.getAbsolutePath() + "/" + jreleaserConfigFile)
+	setGitRootSearch(true)
 }
