@@ -17,7 +17,6 @@ release:
     draft: true
 
 signing:
-  mode: FILE
   active: ALWAYS
   armored: true
 
