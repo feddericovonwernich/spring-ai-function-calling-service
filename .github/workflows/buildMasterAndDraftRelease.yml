@@ -22,4 +22,9 @@ jobs:
         run: ./gradlew build
 
       - name: Create Draft.
-        run: ./gradlew spring-ai-function-calling-service:jreleaserRelease -PjreleaserConfigFile=jreleaserDraftToGithub.yml
+        env:
+          JRELEASER_GPG_PASSPHRASE: ${{ secrets.JRELEASER_GPG_PASSPHRASE }}
+          JRELEASER_GPG_PUBLIC_KEY: ${{ secrets.JRELEASER_GPG_PUBLIC_KEY }}
+          JRELEASER_GPG_SECRET_KEY: ${{ secrets.JRELEASER_GPG_SECRET_KEY }}
+          JRELEASER_GITHUB_TOKEN: ${{ secrets.JRELEASER_GITHUB_TOKEN }}
+        run:  ./gradlew spring-ai-function-calling-service:jreleaserRelease -PjreleaserConfigFile=jreleaserDraftToGithub.yml
