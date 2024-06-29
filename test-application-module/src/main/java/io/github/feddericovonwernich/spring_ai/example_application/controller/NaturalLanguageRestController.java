@@ -23,8 +23,8 @@ public class NaturalLanguageRestController {
     }
 
     @GetMapping("/{threadId}")
-    public ResponseEntity<AssistantResponse> processUserRequestOnThread(@RequestParam String request, @PathVariable String threadId) {
-        return ResponseEntity.ok(assistantService.processRequest(request));
+    public ResponseEntity<String> processUserRequestOnThread(@RequestParam String request, @PathVariable String threadId) {
+        return ResponseEntity.ok(assistantService.processRequest(request, threadId));
     }
 
 }
