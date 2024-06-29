@@ -16,7 +16,7 @@ public @interface FunctionDefinition {
      * The name of the function.
      * @return The name of the function.
      */
-    String name();
+    String name() default "unset";
 
     /**
      * A description of the function's purpose.
