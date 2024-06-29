@@ -5,6 +5,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.feddericovonwernich.spring_ai.function_calling_service.annotations.AssistantToolProvider;
 import io.github.feddericovonwernich.spring_ai.function_calling_service.annotations.FunctionDefinition;
+import io.github.feddericovonwernich.spring_ai.function_calling_service.spi.AssistantResponse;
 import io.github.feddericovonwernich.spring_ai.function_calling_service.spi.AssistantService;
 import io.github.feddericovonwernich.spring_ai.function_calling_service.spi.ToolParameterAware;
 import com.google.gson.Gson;
@@ -104,14 +105,14 @@ public class StandardOpenIAAssistantService implements AssistantService {
     }
 
     @Override
-    public String processRequest(String userInput) {
+    public AssistantResponse processRequest(String userInput) {
         if (getAssistant() == null) {
             throw new RuntimeException("Unable to get an assistant.");
         }
         // Create the thread to execute the user request.
         Thread thread = createThread();
-        MDC.put("threadId", thread.getId());
-        return processRequestOnThread(userInput, thread);
+        String assistantResponse = processRequestOnThread(userInput, thread);
+        return new AssistantResponse(thread.getId(), assistantResponse);
     }
 
     @Override
@@ -230,74 +231,6 @@ public class StandardOpenIAAssistantService implements AssistantService {
         return retrievedRun;
     }
 
-/*    private String executeFunctionCall(ToolCallFunction function) {
-        Map<String, Object> beans = appContext.getBeansWithAnnotation(AssistantToolProvider.class);
-        AtomicReference<String> functionResponse = new AtomicReference<>("");
-        beans.values().forEach(bean -> {
-            Class<?> beanClass = getBeanClass(bean);
-            Method[] methods = beanClass.getDeclaredMethods();
-            for (Method method : methods) {
-                if (method.isSynthetic()) continue;
-                FunctionDefinition functionDefinition = method.getDeclaredAnnotation(FunctionDefinition.class);
-                if (functionDefinition != null && functionDefinition.name().equals(function.getName())) {
-                    log.info("Function arguments: " + function.getArguments());
-                    List<Object> arguments = new ArrayList<>();
-                    if (bean instanceof ToolParameterAware toolParamAwareBean) {
-                        arguments = toolParamAwareBean.getParametersForFunction(function.getName(), function.getArguments());
-                    } else {
-                        List<Class<?>> parameterTypesList = Arrays.stream(method.getParameterTypes()).toList();
-
-                        if (parameterTypesList.isEmpty()) {
-                            arguments = Collections.emptyList();
-                        }  else {
-
-                            JsonObject jsonObject = gson.fromJson(function.getArguments(), JsonObject.class);
-                            if (jsonObject.asMap().keySet().size() != parameterTypesList.size()) {
-                                throw new RuntimeException("Sizes do not match;"); // TODO Make it a checked exception.
-                            }
-
-                            int index = 0;
-                            for (String key : jsonObject.asMap().keySet()) {
-                                Class<?> argumentType = parameterTypesList.get(index);
-                                JsonElement jsonElement = jsonObject.get(key);
-                                String stringParameter;
-
-                                if (jsonElement.isJsonObject()) {
-                                    stringParameter = jsonElement.getAsJsonObject().toString();
-                                } else if (jsonElement.isJsonPrimitive()) {
-                                    stringParameter = jsonElement.getAsJsonPrimitive().toString();
-                                } else if (jsonElement.isJsonArray()) {
-                                    stringParameter = jsonElement.getAsJsonArray().toString();
-                                } else if (jsonElement.isJsonNull()) {
-                                    stringParameter = "null";
-                                } else {
-                                    throw new UnsupportedOperationException("JsonType not implemented: " + jsonElement);
-                                }
-
-                                arguments.add(gson.fromJson(stringParameter, argumentType));
-                                index++;
-                            }
-
-                        }
-                    }
-
-                    try {
-                        Object result = method.invoke(bean, arguments.toArray());
-                        log.info("Execution result: " + result);
-                        functionResponse.set(result.toString());
-                    } catch (Exception e) {
-                        log.error("Error during function execution: {}", e.getMessage());
-                        if (e instanceof InvocationTargetException targetException) {
-                            functionResponse.set(targetException.getTargetException().getMessage());
-                        }
-                    }
-                }
-            }
-        });
-
-        return functionResponse.get();
-    }*/
-
     private String executeFunctionCall(ToolCallFunction function) {
         Map<String, Object> beans = appContext.getBeansWithAnnotation(AssistantToolProvider.class);
         AtomicReference<String> functionResponse = new AtomicReference<>("");
@@ -309,18 +242,22 @@ public class StandardOpenIAAssistantService implements AssistantService {
             for (Method method : methods) {
                 if (method.isSynthetic()) continue;
                 FunctionDefinition functionDefinition = method.getDeclaredAnnotation(FunctionDefinition.class);
-                if (functionDefinition != null && functionDefinition.name().equals(function.getName())) {
-                    log.info("Function arguments: " + function.getArguments());
-                    List<Object> arguments = getArgumentsForMethod(bean, method, function);
-                    if (arguments == null) return; // Skip execution if argument parsing failed
-                    try {
-                        Object result = method.invoke(bean, arguments.toArray());
-                        log.info("Execution result: " + result);
-                        functionResponse.set(result != null ? result.toString() : "null");
-                    } catch (Exception e) {
-                        log.error("Error during function execution: {}", e.getMessage(), e);
-                        if (e instanceof InvocationTargetException targetException) {
-                            functionResponse.set(targetException.getTargetException().getMessage());
+                if (functionDefinition != null) {
+                    String functionDefinitionName = determineFunctionName(functionDefinition, method);
+                    if (functionDefinitionName.equals(function.getName())) {
+                        log.debug("Function arguments: " + function.getArguments());
+                        List<Object> arguments
+                                = getArgumentsForMethod(bean, method, function.getName(), function.getArguments());
+                        if (arguments == null) return; // Skip execution if argument parsing failed
+                        try {
+                            Object result = method.invoke(bean, arguments.toArray());
+                            log.debug("Execution result: " + result);
+                            functionResponse.set(result != null ? result.toString() : "null");
+                        } catch (Exception e) {
+                            log.error("Error during function execution: {}", e.getMessage(), e);
+                            if (e instanceof InvocationTargetException targetException) {
+                                functionResponse.set(targetException.getTargetException().getMessage());
+                            }
                         }
                     }
                 }
@@ -330,11 +267,11 @@ public class StandardOpenIAAssistantService implements AssistantService {
         return functionResponse.get();
     }
 
-    private List<Object> getArgumentsForMethod(Object bean, Method method, ToolCallFunction function) {
+    private List<Object> getArgumentsForMethod(Object bean, Method method, String functionName, String functionArguments) {
         List<Object> arguments = new ArrayList<>();
 
         if (bean instanceof ToolParameterAware toolParamAwareBean) {
-            return toolParamAwareBean.getParametersForFunction(function.getName(), function.getArguments());
+            return toolParamAwareBean.getParametersForFunction(functionName, functionArguments);
         }
 
         List<Class<?>> parameterTypesList = Arrays.asList(method.getParameterTypes());
@@ -342,7 +279,7 @@ public class StandardOpenIAAssistantService implements AssistantService {
             return Collections.emptyList();
         }
 
-        JsonObject jsonObject = gson.fromJson(function.getArguments(), JsonObject.class);
+        JsonObject jsonObject = gson.fromJson(functionArguments, JsonObject.class);
         if (jsonObject.asMap().keySet().size() != parameterTypesList.size()) {
             log.error("Parameter count mismatch: expected {}, but got {}", parameterTypesList.size(), jsonObject.asMap().keySet().size());
             return null;
@@ -361,8 +298,6 @@ public class StandardOpenIAAssistantService implements AssistantService {
                     stringParameter = jsonElement.getAsJsonPrimitive().toString();
                 } else if (jsonElement.isJsonArray()) {
                     stringParameter = jsonElement.getAsJsonArray().toString();
-                } else if (jsonElement.isJsonNull()) {
-                    stringParameter = "null";
                 } else {
                     throw new UnsupportedOperationException("JsonType not implemented: " + jsonElement);
                 }
@@ -410,43 +345,6 @@ public class StandardOpenIAAssistantService implements AssistantService {
         }
     }
 
-/*    private List<Tool> getTools() {
-        List<Tool> toolList = new ArrayList<>();
-        List<AssistantFunction> functions = new ArrayList<>();
-        Map<String, Object> beans = appContext.getBeansWithAnnotation(AssistantToolProvider.class);
-
-        for (Object bean : beans.values()) {
-            Class<?> beanClass = getBeanClass(bean);
-            Method[] methods = beanClass.getDeclaredMethods();
-            for (Method method : methods) {
-                if (method.isSynthetic()) continue;
-                method.setAccessible(true);
-                FunctionDefinition functionDefinition = method.getDeclaredAnnotation(FunctionDefinition.class);
-                if (functionDefinition != null) {
-                    AssistantFunction assistantFunction;
-                    try {
-                        assistantFunction = AssistantFunction.builder()
-                                .name(functionDefinition.name())
-                                .description(functionDefinition.description())
-                                .parameters(buildParameters(functionDefinition.parameters()))
-                                .build();
-                    } catch (JsonProcessingException e) {
-                        throw new RuntimeException("Error while creating assistant tools during parameter processing. Details: " + e.getMessage(), e);
-                    }
-
-                    log.info("Loading function: " + assistantFunction.getName());
-                    functions.add(assistantFunction);
-                }
-            }
-        }
-
-        functions.forEach(assistantFunction -> {
-            toolList.add(new Tool(AssistantToolsEnum.FUNCTION, assistantFunction));
-        });
-
-        return toolList;
-    }*/
-
     private List<Tool> getTools() {
         List<Tool> toolList = new ArrayList<>();
         List<AssistantFunction> functions = new ArrayList<>();
@@ -461,7 +359,7 @@ public class StandardOpenIAAssistantService implements AssistantService {
 
                 FunctionDefinition functionDefinition = method.getDeclaredAnnotation(FunctionDefinition.class);
                 if (functionDefinition != null) {
-                    AssistantFunction assistantFunction = createAssistantFunction(functionDefinition);
+                    AssistantFunction assistantFunction = createAssistantFunction(functionDefinition, method);
                     if (assistantFunction != null) {
                         log.info("Loading function: " + assistantFunction.getName());
                         functions.add(assistantFunction);
@@ -477,17 +375,27 @@ public class StandardOpenIAAssistantService implements AssistantService {
         return toolList;
     }
 
-    private AssistantFunction createAssistantFunction(FunctionDefinition functionDefinition) {
+    private AssistantFunction createAssistantFunction(FunctionDefinition functionDefinition, Method method) {
+        String functionName = determineFunctionName(functionDefinition, method);
+
         try {
             return AssistantFunction.builder()
-                    .name(functionDefinition.name())
+                    .name(functionName)
                     .description(functionDefinition.description())
                     .parameters(buildParameters(functionDefinition.parameters()))
                     .build();
         } catch (JsonProcessingException e) {
-            log.error("Error while creating assistant function for {}: {}", functionDefinition.name(), e.getMessage(), e);
-            return null;
+            log.error("Error while creating assistant function for {}: {}", functionName, e.getMessage(), e);
+            return null; // or throw a more specific exception if needed
         }
+    }
+
+    private String determineFunctionName(FunctionDefinition functionDefinition, Method method) {
+        String functionName = functionDefinition.name();
+        if ("unset".equals(functionName)) {
+            functionName = method.getDeclaringClass().getSimpleName() + "_" + method.getName();
+        }
+        return functionName;
     }
 
 
