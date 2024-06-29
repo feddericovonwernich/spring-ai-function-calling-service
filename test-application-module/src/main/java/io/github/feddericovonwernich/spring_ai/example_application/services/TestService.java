@@ -11,7 +11,6 @@ import java.util.List;
 @Service
 public class TestService {
 
-
     @FunctionDefinition(
         description = "Generates a personalized greeting message.",
         parameters = """
