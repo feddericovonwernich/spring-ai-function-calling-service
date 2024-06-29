@@ -48,8 +48,8 @@ public class NaturalLanguageRestController {
     }
 
     @GetMapping("/{threadId}")
-    public ResponseEntity<AssistantResponse> processUserRequestOnThread(@RequestParam String request, @PathVariable String threadId) {
-        return ResponseEntity.ok(assistantService.processRequest(request));
+    public ResponseEntity<String> processUserRequestOnThread(@RequestParam String request, @PathVariable String threadId) {
+        return ResponseEntity.ok(assistantService.processRequest(request, threadId));
     }
     
 }
@@ -118,7 +118,7 @@ parameters into the actual parameters. For that you may implement `@ToolParamete
 
 ## Configuration options.
 
-### Spring Attributes and Descriptions
+### Attributes and Descriptions
 
 | Configuration Value       | Default Value                                                                                                                                               | Description                                                         |
 |---------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------|
@@ -128,6 +128,9 @@ parameters into the actual parameters. For that you may implement `@ToolParamete
 | `assistant.prompt`        | Simple Assistant. Must understand user input and decide which operation to perform on the system to fulfill user request. Ask user for missing information. | Sets the initial prompt for the assistant.                          |
 | `assistant.resetOnStart`  | false                                                                                                                                                       | Determines whether the assistant should reset its state on startup. |
 | `assistant.openia.apikey` | None                                                                                                                                                        | Specifies the API key for accessing OpenAI services.                |
+
+> [!IMPORTANT]  
+> Notice the prompt of the assistant can be modified to suit your needs.
 
 ## Custom parameter resolution.
 
