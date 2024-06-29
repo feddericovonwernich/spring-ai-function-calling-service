@@ -98,7 +98,7 @@ publishing {
 }
 
 // Define the default value for jreleaserConfigFile
-def defaultJreleaserConfigFile = 'jreleaserDraftToGithub.yml'
+def defaultJreleaserConfigFile = 'jreleaserPreReleaseToGithub.yml'
 
 // Use the value from gradle.properties or fall back to the default
 def jreleaserConfigFile = project.findProperty('jreleaserConfigFile') ?: defaultJreleaserConfigFile
