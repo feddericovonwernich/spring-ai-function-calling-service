@@ -16,6 +16,7 @@ public interface AssistantService {
      * @return The processed string response.
      */
     String processRequest(String userInput);
+    // TODO This method should return the threadId explicitly.
 
     /**
      * Is able to process a user request using underlying AI model. Follow the conversation from the given thread id.
