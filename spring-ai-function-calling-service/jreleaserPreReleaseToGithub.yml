@@ -15,8 +15,11 @@ release:
     sign: true
     overwrite: true
     tagName: latest
+    prerelease:
+      enabled: true
 
 signing:
+  mode: FILE
   active: ALWAYS
   armored: true
 

@@ -1,7 +1,7 @@
 name: Release to Maven Central
 on:
   release:
-    types: [prereleased, released]
+    types: [ prereleased ]
 
 jobs:
   build:
@@ -31,4 +31,4 @@ jobs:
           JRELEASER_NEXUS2_USERNAME: ${{ secrets.JRELEASER_NEXUS2_USERNAME }}
           JRELEASER_NEXUS2_PASSWORD: ${{ secrets.JRELEASER_NEXUS2_PASSWORD }}
           JRELEASER_GITHUB_TOKEN: ${{ secrets.JRELEASER_GITHUB_TOKEN }}
-        run: ./gradlew spring-ai-function-calling-service:jreleaserChecksum spring-ai-function-calling-service:jreleaserSign  spring-ai-function-calling-service:jreleaserDeploy -PjreleaserConfigFile=jreleaserDeployment.yml
+        run: ./gradlew spring-ai-function-calling-service:jreleaserChecksum spring-ai-function-calling-service:jreleaserSign  spring-ai-function-calling-service:jreleaserDeploy -PjreleaserConfigFile=jreleaserPreReleaseDeployment.yml
