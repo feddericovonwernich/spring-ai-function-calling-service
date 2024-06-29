@@ -14,11 +14,7 @@ release:
     owner: feddericovonwernich
     sign: true
     overwrite: true
-    draft: true
-    prerelease:
-      enabled: true
-      pattern: .*-SNAPSHOT
-    tagName: v{{projectVersion}}
+    tagName: latest
 
 signing:
   active: ALWAYS
