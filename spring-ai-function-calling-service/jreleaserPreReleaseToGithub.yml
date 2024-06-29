@@ -19,7 +19,6 @@ release:
       enabled: true
 
 signing:
-  mode: FILE
   active: ALWAYS
   armored: true
 

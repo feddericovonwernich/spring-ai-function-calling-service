@@ -21,7 +21,7 @@ jobs:
       - name: Build with Gradle
         run: ./gradlew build
 
-      - name: Create Draft.
+      - name: Create PreRelease
         env:
           JRELEASER_GPG_PASSPHRASE: ${{ secrets.JRELEASER_GPG_PASSPHRASE }}
           JRELEASER_GPG_PUBLIC_KEY: ${{ secrets.JRELEASER_GPG_PUBLIC_KEY }}
