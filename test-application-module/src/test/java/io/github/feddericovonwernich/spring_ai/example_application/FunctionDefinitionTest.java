@@ -31,15 +31,16 @@ public class FunctionDefinitionTest {
             getToolsMethod.setAccessible(true);
             List<Tool> toolList = (List<Tool>) getToolsMethod.invoke(standardOpenIAAssistantService);
 
-            // Verify it has two tools.
-            assertEquals(4, toolList.size());
+            assertEquals(6, toolList.size());
 
             // Verify automatically generated and manually set names are present.
             for (Tool tool : toolList) {
                 if (!tool.getFunction().getName().equals("TestService_factorial_id")
-                        && !tool.getFunction().getName().equals("TestService_generateGreeting")
-                            && !tool.getFunction().getName().equals("TestService_concatenateList")
-                                && !tool.getFunction().getName().equals("TestService_printPersonInfo")) {
+                        && !tool.getFunction().getName().equals("SomeTestService_generateGreeting")
+                            && !tool.getFunction().getName().equals("SomeTestService_concatenateList")
+                                && !tool.getFunction().getName().equals("SomeTestService_printPersonInfo")
+                                    && !tool.getFunction().getName().equals("ConcatListID")
+                                            && !tool.getFunction().getName().equals("SomeOtherTestService_printPersonInfo")) {
                     fail();
                 }
             }

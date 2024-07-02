@@ -134,4 +134,37 @@ parameters into the actual parameters. For that you may implement `@ToolParamete
 
 ## Custom parameter resolution.
 
-TBD.
+If for some reason, automatic parameter resolution can't handle your use case, you can manually implement how the parameters
+are resolved. You just need to implement interface `ToolParameterAware` and write your own implementation for
+`getParametersForFunction` method.
+
+Example:
+```java
+@Service
+@AssistantToolProvider
+public class SomeOtherTestService implements ToolParameterAware {
+
+    //rest of the class
+
+    @Override
+    public List<Object> getParametersForFunction(String functionName, String parametersString) {
+        JsonObject jsonObject = JsonParser.parseString(parametersString).getAsJsonObject();
+
+        if (functionName.equals("ConcatListID")) {
+            List<String> items = gson.fromJson(jsonObject.getAsJsonArray("items"), List.class);
+            return List.of(items);
+        } else if (functionName.equals("SomeOtherTestService_printPersonInfo")) {
+            Person person = gson.fromJson(jsonObject.getAsJsonObject("person"), Person.class);
+            return List.of(person);
+        } else {
+            throw new IllegalArgumentException("Unknown function name");
+        }
+    }
+
+}
+```
+
+If you don't give your functions an explicit name, then it will follow the pattern `{className}_{methodName}` which you can
+use to identify them. Argument `parameterString` will be a JSON with the values the AI wants to call your function with.
+It's up to you how you turn this JSON into the actual parameters for the function call.
+
