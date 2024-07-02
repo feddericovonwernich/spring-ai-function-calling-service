@@ -22,13 +22,33 @@ import static org.junit.jupiter.api.Assertions.fail;
 @ActiveProfiles("true-with-key")
 @TestPropertySource(locations = "classpath:application-true-with-key.yml")
 @ImportAutoConfiguration(OpenIAServiceAutoConfiguration.class)
-public class ToolParameterAwareTest {
+public class AutomaticParameterResolutionTest {
 
     @Autowired
     private StandardOpenIAAssistantService standardOpenIAAssistantService;
 
     @Autowired
-    private SomeOtherTestService someOtherTestService;
+    private SomeTestService testService;
+
+    @Test
+    public void testToolCallPrimitiveParam() {
+        try {
+            Method methodArgument = SomeTestService.class.getDeclaredMethod("generateGreeting", String.class, String.class);
+            String parameters = """
+                    {"name":"Federico","greeting":"Hello, Federico! You are amazing. Have a wonderful day!"}
+                    """;
+
+            Method getArgumentsForMethod = StandardOpenIAAssistantService.class.getDeclaredMethod("getArgumentsForMethod", Object.class, Method.class, String.class, String.class);
+            getArgumentsForMethod.setAccessible(true);
+            List<Object> argumentsList = (List<Object>) getArgumentsForMethod.invoke(standardOpenIAAssistantService, testService, methodArgument, "TestService_generateGreeting", parameters);
+
+            Assertions.assertEquals(2, argumentsList.size());
+            Assertions.assertTrue(argumentsList.get(0) instanceof String);
+            Assertions.assertTrue(argumentsList.get(1) instanceof String);
+        } catch (Exception e) {
+            fail();
+        }
+    }
 
     @Test
     public void testToolCallObjectParam() {
@@ -40,7 +60,7 @@ public class ToolParameterAwareTest {
 
             Method getArgumentsForMethod = StandardOpenIAAssistantService.class.getDeclaredMethod("getArgumentsForMethod", Object.class, Method.class, String.class, String.class);
             getArgumentsForMethod.setAccessible(true);
-            List<Object> argumentsList = (List<Object>) getArgumentsForMethod.invoke(standardOpenIAAssistantService, someOtherTestService, methodArgument, "SomeOtherTestService_printPersonInfo", parameters);
+            List<Object> argumentsList = (List<Object>) getArgumentsForMethod.invoke(standardOpenIAAssistantService, testService, methodArgument, "TestService_printPersonInfo", parameters);
 
             Assertions.assertEquals(1, argumentsList.size());
             Assertions.assertTrue(argumentsList.get(0) instanceof Person);
@@ -59,7 +79,7 @@ public class ToolParameterAwareTest {
 
             Method getArgumentsForMethod = StandardOpenIAAssistantService.class.getDeclaredMethod("getArgumentsForMethod", Object.class, Method.class, String.class, String.class);
             getArgumentsForMethod.setAccessible(true);
-            List<Object> argumentsList = (List<Object>) getArgumentsForMethod.invoke(standardOpenIAAssistantService, someOtherTestService, methodArgument, "ConcatListID", parameters);
+            List<Object> argumentsList = (List<Object>) getArgumentsForMethod.invoke(standardOpenIAAssistantService, testService, methodArgument, "TestService_concatenateList", parameters);
 
             Assertions.assertEquals(1, argumentsList.size());
             Assertions.assertTrue(argumentsList.get(0) instanceof List);

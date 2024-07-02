@@ -28,8 +28,8 @@ dependencies {
 
 	implementation project(":spring-ai-function-calling-service")
 
-	// https://mvnrepository.com/artifact/com.theokanning.openai-gpt3-java/service
-	implementation group: 'com.theokanning.openai-gpt3-java', name: 'service', version: '0.18.2'
+	// https://mvnrepository.com/artifact/com.google.code.gson/gson
+	implementation group: 'com.google.code.gson', name: 'gson', version: '2.11.0'
 }
 
 tasks.named('test') {

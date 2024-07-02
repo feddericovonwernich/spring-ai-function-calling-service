@@ -9,7 +9,7 @@ import java.util.List;
 
 @AssistantToolProvider
 @Service
-public class TestService {
+public class SomeTestService {
 
     @FunctionDefinition(
         description = "Generates a personalized greeting message.",
