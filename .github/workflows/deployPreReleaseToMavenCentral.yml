@@ -1,4 +1,4 @@
-name: Release to Maven Central
+name: Pre-Release to Maven Central
 on:
   release:
     types: [ prereleased ]
@@ -30,5 +30,5 @@ jobs:
           JRELEASER_GPG_SECRET_KEY: ${{ secrets.JRELEASER_GPG_SECRET_KEY }}
           JRELEASER_NEXUS2_USERNAME: ${{ secrets.JRELEASER_NEXUS2_USERNAME }}
           JRELEASER_NEXUS2_PASSWORD: ${{ secrets.JRELEASER_NEXUS2_PASSWORD }}
-          JRELEASER_GITHUB_TOKEN: ${{ secrets.JRELEASER_GITHUB_TOKEN }}
+          JRELEASER_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: ./gradlew spring-ai-function-calling-service:jreleaserChecksum spring-ai-function-calling-service:jreleaserSign  spring-ai-function-calling-service:jreleaserDeploy -PjreleaserConfigFile=jreleaserPreReleaseDeployment.yml
