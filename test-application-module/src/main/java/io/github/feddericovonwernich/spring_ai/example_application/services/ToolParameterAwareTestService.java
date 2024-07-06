@@ -13,7 +13,7 @@ import java.util.List;
 
 @Service
 @AssistantToolProvider
-public class SomeOtherTestService implements ToolParameterAware {
+public class ToolParameterAwareTestService implements ToolParameterAware {
 
     private final Gson gson = new Gson();
 

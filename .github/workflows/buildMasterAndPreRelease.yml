@@ -1,4 +1,4 @@
-name: Create Draft-Release
+name: Create Pre-Release
 
 on:
   push:
@@ -26,5 +26,5 @@ jobs:
           JRELEASER_GPG_PASSPHRASE: ${{ secrets.JRELEASER_GPG_PASSPHRASE }}
           JRELEASER_GPG_PUBLIC_KEY: ${{ secrets.JRELEASER_GPG_PUBLIC_KEY }}
           JRELEASER_GPG_SECRET_KEY: ${{ secrets.JRELEASER_GPG_SECRET_KEY }}
-          JRELEASER_GITHUB_TOKEN: ${{ secrets.JRELEASER_GITHUB_TOKEN }}
+          JRELEASER_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run:  ./gradlew spring-ai-function-calling-service:jreleaserRelease -PjreleaserConfigFile=jreleaserPreReleaseToGithub.yml

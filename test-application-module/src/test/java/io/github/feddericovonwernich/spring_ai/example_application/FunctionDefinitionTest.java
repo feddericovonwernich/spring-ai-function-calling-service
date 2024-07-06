@@ -1,11 +1,9 @@
 package io.github.feddericovonwernich.spring_ai.example_application;
 
 import com.theokanning.openai.assistants.Tool;
-import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.OpenIAServiceAutoConfiguration;
 import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.StandardOpenIAAssistantService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.autoconfigure.ImportAutoConfiguration;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
@@ -13,12 +11,12 @@ import org.springframework.test.context.TestPropertySource;
 import java.lang.reflect.Method;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.fail;
 
 @SpringBootTest
 @ActiveProfiles("true-with-key")
 @TestPropertySource(locations = "classpath:application-true-with-key.yml")
-@ImportAutoConfiguration(OpenIAServiceAutoConfiguration.class)
 public class FunctionDefinitionTest {
 
     @Autowired
@@ -36,11 +34,11 @@ public class FunctionDefinitionTest {
             // Verify automatically generated and manually set names are present.
             for (Tool tool : toolList) {
                 if (!tool.getFunction().getName().equals("TestService_factorial_id")
-                        && !tool.getFunction().getName().equals("SomeTestService_generateGreeting")
-                            && !tool.getFunction().getName().equals("SomeTestService_concatenateList")
-                                && !tool.getFunction().getName().equals("SomeTestService_printPersonInfo")
+                        && !tool.getFunction().getName().equals("FunctionDefinitionTestService_generateGreeting")
+                            && !tool.getFunction().getName().equals("FunctionDefinitionTestService_concatenateList")
+                                && !tool.getFunction().getName().equals("FunctionDefinitionTestService_printPersonInfo")
                                     && !tool.getFunction().getName().equals("ConcatListID")
-                                            && !tool.getFunction().getName().equals("SomeOtherTestService_printPersonInfo")) {
+                                            && !tool.getFunction().getName().equals("ToolParameterAwareTestService_printPersonInfo")) {
                     fail();
                 }
             }
