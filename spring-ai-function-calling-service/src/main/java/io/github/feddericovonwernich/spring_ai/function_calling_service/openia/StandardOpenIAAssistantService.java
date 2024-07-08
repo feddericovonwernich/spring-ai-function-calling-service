@@ -253,10 +253,12 @@ public class StandardOpenIAAssistantService implements AssistantService {
                             Object result = method.invoke(bean, arguments.toArray());
                             log.debug("Execution result: " + result);
                             functionResponse.set(result != null ? result.toString() : "null");
-                        } catch (Exception e) {
+                        } catch (Exception  e) {
                             log.error("Error during function execution: {}", e.getMessage(), e);
                             if (e instanceof InvocationTargetException targetException) {
                                 functionResponse.set(targetException.getTargetException().getMessage());
+                            } else  {
+                                functionResponse.set(e.getMessage());
                             }
                         }
                     }
