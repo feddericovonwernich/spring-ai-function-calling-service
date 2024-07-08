@@ -246,10 +246,10 @@ public class StandardOpenIAAssistantService implements AssistantService {
                     String functionDefinitionName = determineFunctionName(functionDefinition, method);
                     if (functionDefinitionName.equals(function.getName())) {
                         log.debug("Function arguments: " + function.getArguments());
-                        List<Object> arguments
-                                = getArgumentsForMethod(bean, method, function.getName(), function.getArguments());
-                        if (arguments == null) return; // Skip execution if argument parsing failed
                         try {
+                            List<Object> arguments
+                                    = getArgumentsForMethod(bean, method, function.getName(), function.getArguments());
+                            if (arguments == null) return; // Skip execution if argument parsing failed
                             Object result = method.invoke(bean, arguments.toArray());
                             log.debug("Execution result: " + result);
                             functionResponse.set(result != null ? result.toString() : "null");
@@ -281,33 +281,30 @@ public class StandardOpenIAAssistantService implements AssistantService {
 
         JsonObject jsonObject = gson.fromJson(functionArguments, JsonObject.class);
         if (jsonObject.asMap().keySet().size() != parameterTypesList.size()) {
-            log.error("Parameter count mismatch: expected {}, but got {}", parameterTypesList.size(), jsonObject.asMap().keySet().size());
-            return null;
+            String errorMessage = String.format("Parameter count mismatch: expected %d, but got %d", parameterTypesList.size(), jsonObject.asMap().keySet().size());
+            log.error(errorMessage);
+            throw new IllegalStateException(errorMessage);
         }
 
-        try {
-            int index = 0;
-            for (String key : jsonObject.asMap().keySet()) {
-                Class<?> argumentType = parameterTypesList.get(index);
-                JsonElement jsonElement = jsonObject.get(key);
-                String stringParameter;
 
-                if (jsonElement.isJsonObject()) {
-                    stringParameter = jsonElement.getAsJsonObject().toString();
-                } else if (jsonElement.isJsonPrimitive()) {
-                    stringParameter = jsonElement.getAsJsonPrimitive().toString();
-                } else if (jsonElement.isJsonArray()) {
-                    stringParameter = jsonElement.getAsJsonArray().toString();
-                } else {
-                    throw new UnsupportedOperationException("JsonType not implemented: " + jsonElement);
-                }
+        int index = 0;
+        for (String key : jsonObject.asMap().keySet()) {
+            Class<?> argumentType = parameterTypesList.get(index);
+            JsonElement jsonElement = jsonObject.get(key);
+            String stringParameter;
 
-                arguments.add(gson.fromJson(stringParameter, argumentType));
-                index++;
+            if (jsonElement.isJsonObject()) {
+                stringParameter = jsonElement.getAsJsonObject().toString();
+            } else if (jsonElement.isJsonPrimitive()) {
+                stringParameter = jsonElement.getAsJsonPrimitive().toString();
+            } else if (jsonElement.isJsonArray()) {
+                stringParameter = jsonElement.getAsJsonArray().toString();
+            } else {
+                throw new UnsupportedOperationException("JsonType not implemented: " + jsonElement);
             }
-        } catch (Exception e) {
-            log.error("Error parsing function arguments: {}", e.getMessage(), e);
-            return null;
+
+            arguments.add(gson.fromJson(stringParameter, argumentType));
+            index++;
         }
 
         return arguments;
