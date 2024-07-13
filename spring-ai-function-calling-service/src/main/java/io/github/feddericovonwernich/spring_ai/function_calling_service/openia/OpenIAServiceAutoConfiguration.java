@@ -2,8 +2,8 @@ package io.github.feddericovonwernich.spring_ai.function_calling_service.openia;
 
 import io.github.feddericovonwernich.spring_ai.function_calling_service.conditions.AssistantEnabledCondition;
 import io.github.feddericovonwernich.spring_ai.function_calling_service.conditions.OpenIAKeyPresentCondition;
+import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.service.ServiceOpenAI;
 import io.github.feddericovonwernich.spring_ai.function_calling_service.spi.AssistantService;
-import com.theokanning.openai.service.OpenAiService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.context.ApplicationContext;
@@ -28,13 +28,13 @@ public class OpenIAServiceAutoConfiguration {
     private String openIaApiKey;
 
     @Bean
-    public OpenAiService openAiService() {
-        return new OpenAiService(openIaApiKey);
+    public ServiceOpenAI serviceOpenAI() {
+        return new ServiceOpenAI(openIaApiKey);
     }
 
     @Bean
     public AssistantService assistantService(ApplicationContext appContext) {
-        return new StandardOpenIAAssistantService(appContext, openAiService());
+        return new StandardOpenIAAssistantService(appContext, serviceOpenAI());
     }
 
 }

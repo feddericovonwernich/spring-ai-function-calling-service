@@ -2,33 +2,34 @@ package io.github.feddericovonwernich.spring_ai.function_calling_service.openia;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.feddericovonwernich.spring_ai.function_calling_service.annotations.AssistantToolProvider;
 import io.github.feddericovonwernich.spring_ai.function_calling_service.annotations.FunctionDefinition;
+import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.assistants.*;
+import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.common.ListSearchParameters;
+import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.common.OpenAiHttpException;
+import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.common.OpenAiResponse;
+import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.messages.Message;
+import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.messages.MessageContent;
+import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.messages.content.Text;
+import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.messages.MessageRequest;
+import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.threads.Thread;
+import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.runs.*;
+import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.service.ServiceOpenAI;
+import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.threads.ThreadRequest;
 import io.github.feddericovonwernich.spring_ai.function_calling_service.spi.AssistantResponse;
 import io.github.feddericovonwernich.spring_ai.function_calling_service.spi.AssistantService;
+import io.github.feddericovonwernich.spring_ai.function_calling_service.spi.ServiceAssistant;
 import io.github.feddericovonwernich.spring_ai.function_calling_service.spi.ToolParameterAware;
 import com.google.gson.Gson;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import com.theokanning.openai.ListSearchParameters;
-import com.theokanning.openai.OpenAiHttpException;
-import com.theokanning.openai.OpenAiResponse;
-import com.theokanning.openai.assistants.*;
-import com.theokanning.openai.assistants.AssistantRequest.AssistantRequestBuilder;
-import com.theokanning.openai.messages.Message;
-import com.theokanning.openai.messages.MessageContent;
-import com.theokanning.openai.messages.MessageRequest;
-import com.theokanning.openai.messages.content.Text;
-import com.theokanning.openai.runs.*;
-import com.theokanning.openai.service.OpenAiService;
-import com.theokanning.openai.threads.Thread;
-import com.theokanning.openai.threads.ThreadRequest;
+
 import jakarta.annotation.Nonnull;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.slf4j.MDC;
 import org.springframework.aop.SpringProxy;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationContext;
@@ -39,8 +40,6 @@ import java.lang.reflect.Method;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static com.theokanning.openai.utils.TikTokensUtil.ModelEnum.valueOf;
-
 /**
  * AssistantService OpenIA implementation.
  *
@@ -50,17 +49,24 @@ public class StandardOpenIAAssistantService implements AssistantService {
 
     private static final Logger log = LoggerFactory.getLogger(StandardOpenIAAssistantService.class);
 
-    @Value("${assistant.name:DefaultFunctionCallingAssistant}")
+    @Value("${assistant.openia.name:DefaultFunctionCallingAssistant}")
     private String assistantName;
 
-    @Value("${assistant.openia.model:GPT_3_5_TURBO}")
+    @Value("${assistant.openia.model:gpt-3.5-turbo}")
     private String assistantModel;
 
-    @Value("${assistant.description:Service to interact with system through a text chat.}")
+    @Value("${assistant.openia.description:Service to interact with system through a text chat.}")
     private String assistantDescription;
 
-    @Value("${assistant.prompt:Simple Assistant. Must understand user input and decide which operation to perform on the system to fulfill user request. Ask user for missing information.}")
+    // TODO Update this prompt.
+    @Value("${assistant.openia.prompt:Simple Assistant. Must understand user input and decide which operation to perform on the system to fulfill user request. Ask user for missing information.}")
     private String assistantPrompt;
+
+    @Value("${assistant.openia.agent.prompt:Simple Assistant. Must understand user input and decide which operation to perform on the system to fulfill user request. Ask user for missing information.}")
+    private String agentAssistantPrompt;
+
+    @Value("${assistant.openia.agent.model:gpt-3.5-turbo}")
+    private String agentAssistantModel;
 
     @Value("${assistant.resetOnStart:false}")
     private boolean resetAssistantOnStartup;
@@ -68,74 +74,116 @@ public class StandardOpenIAAssistantService implements AssistantService {
 
     private final ApplicationContext appContext;
 
-    private final OpenAiService service;
+    private final ServiceOpenAI aiService;
 
-    private Assistant assistant;
+    private Assistant orchestatorAssistant;
+
+    private List<ServiceAssistant> serviceAssistants;
 
     private final ThreadLocal<Boolean> assistantFailed = new ThreadLocal<>();
     private final Gson gson = new Gson();
 
-    public StandardOpenIAAssistantService(ApplicationContext appContext, OpenAiService service) {
+    public StandardOpenIAAssistantService(ApplicationContext appContext, ServiceOpenAI aiService) {
         this.appContext = appContext;
-        this.service = service;
+        this.aiService = aiService;
     }
 
     @PostConstruct
     private void init() {
         if (resetAssistantOnStartup) {
-            if (assistant == null) {
-                assistant = fetchAssistants();
-                if (assistant != null) {
-                    service.deleteAssistant(assistant.getId());
-                    log.info("Deleted assistant with id: " + assistant.getId());
-                    assistant = null;
+            if (orchestatorAssistant == null) {
+                orchestatorAssistant = fetchAssistants();
+                if (orchestatorAssistant != null) {
+                    aiService.deleteAssistant(orchestatorAssistant.getId());
+                    log.info("Deleted assistant with id: " + orchestatorAssistant.getId());
+                    orchestatorAssistant = null;
+                }
+            }
+            if (serviceAssistants == null || serviceAssistants.isEmpty()) {
+                serviceAssistants = fetchServiceAssistants();
+                if (!serviceAssistants.isEmpty()) {
+                    for (ServiceAssistant serviceAssistant : serviceAssistants) {
+                        aiService.deleteAssistant(serviceAssistant.getAssistant().getId());
+                        log.info("Deleted assistant with id: " + serviceAssistant.getAssistant().getId());
+                    }
+                    serviceAssistants = null;
                 }
             }
         }
     }
 
-    private Assistant getAssistant() {
-        if (assistant == null) {
-            assistant = fetchAssistants();
-            if (assistant == null) {
-                assistant = createAssistant();
+    private Assistant getOrchestatorAssistant() {
+        if (orchestatorAssistant == null) {
+            orchestatorAssistant = fetchAssistants();
+            if (orchestatorAssistant == null) {
+                orchestatorAssistant = createOrchestatorAssistant();
             }
         }
-        return assistant;
+        return orchestatorAssistant;
     }
+
+    private List<ServiceAssistant> getServiceAssistants() {
+        if (serviceAssistants == null || serviceAssistants.isEmpty()) {
+            serviceAssistants = fetchServiceAssistants();
+            if (serviceAssistants.isEmpty()) {
+                serviceAssistants = createServiceAssistants();
+            }
+        }
+        return serviceAssistants;
+    }
+
+    private List<ServiceAssistant> fetchServiceAssistants() {
+        OpenAiResponse<Assistant> response = aiService.listAssistants(new ListSearchParameters());
+        List<Assistant> assistantList = response.getData();
+        List<Assistant> filteredList = new ArrayList<>();
+
+        for (Assistant serviceAssistant : assistantList) {
+            if (serviceAssistant.getName().endsWith("_serviceAgent")) {
+                log.info("ServiceAssistant found: " + serviceAssistant.getName());
+                filteredList.add(serviceAssistant);
+            }
+        }
+
+        if (filteredList.isEmpty()) {
+            log.info("No ServiceAssistant found with the suffix '_serviceAgent'.");
+        }
+
+        return createServiceAssistants(filteredList);
+    }
+
 
     @Override
     public AssistantResponse processRequest(String userInput) {
-        if (getAssistant() == null) {
+        if (getOrchestatorAssistant() == null) {
             throw new RuntimeException("Unable to get an assistant.");
         }
         // Create the thread to execute the user request.
         Thread thread = createThread();
-        String assistantResponse = processRequestOnThread(userInput, thread);
+        String assistantResponse = processRequestOnThread(userInput, thread, getOrchestatorAssistant());
         return new AssistantResponse(thread.getId(), assistantResponse);
     }
 
     @Override
     public String processRequest(String userInput, String threadId) {
-        if (getAssistant() == null) {
+        if (getOrchestatorAssistant() == null) {
             throw new RuntimeException("Unable to get an assistant.");
         }
         // Get the thread where it was executing.
         Thread thread = getThread(threadId);
         if (thread != null) {
-            return processRequestOnThread(userInput, thread);
+            return processRequestOnThread(userInput, thread, getOrchestatorAssistant());
         } else {
             return "Non-existent thread. Use a valid thread id.";
         }
     }
 
-    private String processRequestOnThread(String userInput, Thread thread) {
+    private String processRequestOnThread(String userInput, Thread thread, Assistant assistant) {
         // Append user request to thread.
         createMessageOnThread(userInput, thread);
 
         // Assign the thread to the assistant.
-        Run run = createRunForThread(thread);
-        Run retrievedRun = service.retrieveRun(thread.getId(), run.getId());
+        Run run = createRunForThread(thread, assistant);
+        Run retrievedRun = aiService.retrieveRun(thread.getId(), run.getId());
         retrievedRun = waitForRun(thread, run, retrievedRun);
 
         processActions(retrievedRun, thread, run);
@@ -145,7 +193,7 @@ public class StandardOpenIAAssistantService implements AssistantService {
         }
 
         // Get the response.
-        OpenAiResponse<Message> response = service.listMessages(thread.getId());
+        OpenAiResponse<Message> response = aiService.listMessages(thread.getId());
 
         // Before extracting the message text, ensure that the response and its content are not null
         Optional<String> messageText = response.getData().stream()
@@ -160,7 +208,7 @@ public class StandardOpenIAAssistantService implements AssistantService {
 
     private Thread getThread(String threadId) {
         try {
-            return service.retrieveThread(threadId);
+            return aiService.retrieveThread(threadId);
         } catch (OpenAiHttpException ex) {
             if (ex.statusCode == 404) {
                 return null;
@@ -176,12 +224,15 @@ public class StandardOpenIAAssistantService implements AssistantService {
             SubmitToolOutputsRequest submitToolOutputsRequest = SubmitToolOutputsRequest.builder()
                     .toolOutputs(toolOutputRequestItems)
                     .build();
-            retrievedRun = service.submitToolOutputs(retrievedRun.getThreadId(), retrievedRun.getId(), submitToolOutputsRequest);
+            retrievedRun = aiService.submitToolOutputs(retrievedRun.getThreadId(), retrievedRun.getId(), submitToolOutputsRequest);
             retrievedRun = waitForRun(thread, run, retrievedRun);
             processActions(retrievedRun, thread, run);
         }
         if (retrievedRun.getStatus().equals("failed")) {
             log.error(retrievedRun.getLastError().getMessage());
+            if (retrievedRun.getLastError().getCode().equals("rate_limit_exceeded")) {
+                // TODO Need to retry with exponential backoff.
+            }
             assistantFailed.set(true);
         }
     }
@@ -202,23 +253,23 @@ public class StandardOpenIAAssistantService implements AssistantService {
         return toolOutputRequestItems;
     }
 
-    private Run createRunForThread(Thread thread) {
+    private Run createRunForThread(Thread thread, Assistant assistant) {
         RunCreateRequest runCreateRequest = RunCreateRequest.builder()
-                .assistantId(getAssistant().getId())
+                .assistantId(assistant.getId())
                 .build();
-        return service.createRun(thread.getId(), runCreateRequest);
+        return aiService.createRun(thread.getId(), runCreateRequest);
     }
 
     private void createMessageOnThread(String userInput, Thread thread) {
         MessageRequest messageRequest = MessageRequest.builder()
                 .content(userInput)
                 .build();
-        service.createMessage(thread.getId(), messageRequest);
+        aiService.createMessage(thread.getId(), messageRequest);
     }
 
     private Thread createThread() {
         ThreadRequest threadRequest = ThreadRequest.builder().build();
-        return service.createThread(threadRequest);
+        return aiService.createThread(threadRequest);
     }
 
     @Nonnull
@@ -226,48 +277,92 @@ public class StandardOpenIAAssistantService implements AssistantService {
         while (!(retrievedRun.getStatus().equals("completed"))
                 && !(retrievedRun.getStatus().equals("failed"))
                 && !(retrievedRun.getStatus().equals("requires_action"))) {
-            retrievedRun = service.retrieveRun(thread.getId(), run.getId());
+            retrievedRun = aiService.retrieveRun(thread.getId(), run.getId());
         }
         return retrievedRun;
     }
 
     private String executeFunctionCall(ToolCallFunction function) {
+
+        if (function.getName().toLowerCase().contains("_serviceagent")) {
+
+            log.debug("Function call name: " + function.getName());
+            log.debug("Function call arguments: " + function.getArguments());
+
+            for (ServiceAssistant serviceAssistant : serviceAssistants) {
+                // TODO This approach looks brittle, should be more consistent.
+                if (function.getName().contains(serviceAssistant.getAssistantFunctionId())) {
+                    try {
+                        ObjectMapper objectMapper = new ObjectMapper();
+                        JsonNode rootNode = objectMapper.readTree(function.getArguments());
+                        JsonNode descriptionNode = rootNode.path("instructions");
+
+                        String instructions = descriptionNode.asText();
+                        String agentResponse = processRequestOnThread(instructions, createThread(), serviceAssistant.getAssistant());
+                        log.debug("Agent: " + serviceAssistant.getAssistantFunctionId() + " | agentResponse: " + agentResponse);
+                        return agentResponse;
+                    } catch (JsonProcessingException e) {
+                        return e.getMessage();
+                    }
+                }
+            }
+        }
+
         Map<String, Object> beans = appContext.getBeansWithAnnotation(AssistantToolProvider.class);
         AtomicReference<String> functionResponse = new AtomicReference<>("");
 
         beans.values().forEach(bean -> {
             Class<?> beanClass = getBeanClass(bean);
-            Method[] methods = beanClass.getDeclaredMethods();
-
-            for (Method method : methods) {
-                if (method.isSynthetic()) continue;
-                FunctionDefinition functionDefinition = method.getDeclaredAnnotation(FunctionDefinition.class);
-                if (functionDefinition != null) {
-                    String functionDefinitionName = determineFunctionName(functionDefinition, method);
-                    if (functionDefinitionName.equals(function.getName())) {
-                        log.debug("Function Name: " + function.getName() + " | Function arguments: " + function.getArguments());
-                        try {
-                            List<Object> arguments
-                                    = getArgumentsForMethod(bean, method, function.getName(), function.getArguments());
-                            log.debug("Deserialized arguments: " + arguments);
-                            if (arguments == null) return; // Skip execution if argument parsing failed
-                            Object result = method.invoke(bean, arguments.toArray());
-                            log.debug("Execution result: " + result);
-                            functionResponse.set(result != null ? result.toString() : "null");
-                        } catch (Exception  e) {
-                            log.error("Error during function execution: {}", e.getMessage(), e);
-                            if (e instanceof InvocationTargetException targetException) {
-                                functionResponse.set(targetException.getTargetException().getMessage());
-                            } else  {
-                                functionResponse.set(e.getMessage());
-                            }
-                        }
-                    }
-                }
-            }
+            invokeMatchingFunction(function, bean, beanClass, functionResponse);
         });
 
         return functionResponse.get();
+    }
+
+    private void invokeMatchingFunction(ToolCallFunction function, Object bean, Class<?> beanClass, AtomicReference<String> functionResponse) {
+        Method[] methods = beanClass.getDeclaredMethods();
+
+        for (Method method : methods) {
+            if (method.isSynthetic()) continue;
+
+            FunctionDefinition functionDefinition = method.getDeclaredAnnotation(FunctionDefinition.class);
+            if (functionDefinition != null && isMatchingFunction(functionDefinition, method, function)) {
+                executeFunction(bean, method, function, functionResponse);
+            }
+        }
+    }
+
+    private boolean isMatchingFunction(FunctionDefinition functionDefinition, Method method, ToolCallFunction function) {
+        String functionDefinitionName = determineFunctionName(functionDefinition, method);
+        return functionDefinitionName.equals(function.getName());
+    }
+
+    private void executeFunction(Object bean, Method method, ToolCallFunction function, AtomicReference<String> functionResponse) {
+        log.debug("Function Name: " + function.getName() + " | Function arguments: " + function.getArguments());
+
+        try {
+            List<Object> arguments = getArgumentsForMethod(bean, method, function.getName(), function.getArguments());
+            log.debug("Deserialized arguments: " + arguments);
+
+            if (arguments == null) return; // Skip execution if argument parsing failed
+
+            Object result = method.invoke(bean, arguments.toArray());
+            log.debug("Execution result: " + result);
+
+            functionResponse.set(result != null ? result.toString() : "null");
+        } catch (Exception e) {
+            handleExecutionException(e, functionResponse);
+        }
+    }
+
+    private void handleExecutionException(Exception e, AtomicReference<String> functionResponse) {
+        log.error("Error during function execution: {}", e.getMessage(), e);
+
+        if (e instanceof InvocationTargetException targetException) {
+            functionResponse.set(targetException.getTargetException().getMessage());
+        } else {
+            functionResponse.set(e.getMessage());
+        }
     }
 
     private List<Object> getArgumentsForMethod(Object bean, Method method, String functionName, String functionArguments) {
@@ -314,7 +409,7 @@ public class StandardOpenIAAssistantService implements AssistantService {
     }
 
     private Assistant fetchAssistants() {
-        OpenAiResponse<Assistant> response = service.listAssistants(new ListSearchParameters());
+        OpenAiResponse<Assistant> response = aiService.listAssistants(new ListSearchParameters());
         List<Assistant> assistantList = response.getData();
         for (Assistant assistant : assistantList) {
             if (assistant.getName().equals(assistantName)) {
@@ -326,44 +421,163 @@ public class StandardOpenIAAssistantService implements AssistantService {
         return null;
     }
 
-    private Assistant createAssistant() {
-        List<Tool> toolList = getTools();
+    private Assistant createOrchestatorAssistant() {
+        List<Tool> toolList = getTools(getServiceAssistants());
 
         try {
-            AssistantRequestBuilder requestBuilder = AssistantRequest.builder()
-                    .model(valueOf(assistantModel).getName())
-                    .description(assistantDescription)
-                    .name(assistantName)
-                    .instructions(assistantPrompt)
-                    .tools(toolList);
+            AssistantRequest assistantRequest = AssistantRequest.builder()
+                .model(assistantModel)
+                .description(assistantDescription)
+                .name(assistantName)
+                .instructions(assistantPrompt)
+                .tools(toolList)
+                .build();
 
-            Assistant assistant = service.createAssistant(requestBuilder.build());
+            Assistant assistant = aiService.createAssistant(assistantRequest);
             log.info("Created assistant successfully wit ID: " + assistant.getId());
+            log.debug("Assistant: " + assistant);
             return assistant;
         } catch (IllegalArgumentException ex) {
             throw new RuntimeException("Illegal model: " + assistantModel);
         }
     }
 
-    private List<Tool> getTools() {
+
+    private List<ServiceAssistant> createServiceAssistants() {
+        List<ServiceAssistant> assistantList = new ArrayList<>();
+        Map<String, Object> beans = appContext.getBeansWithAnnotation(AssistantToolProvider.class);
+        for (Object bean : beans.values()) {
+            List<Tool> toolList = getToolsForProvider(bean);
+            String serviceName = bean.getClass().getSuperclass().getSimpleName();
+            String assistantName = serviceName + "_serviceAgent";
+            try {
+                AssistantRequest assistantRequest = AssistantRequest.builder()
+                        .model(agentAssistantModel)
+                        .description("Specialized assistant to interact with " + serviceName)
+                        .name(assistantName)
+                        .instructions(agentAssistantPrompt)
+                        .tools(toolList)
+                        .build();
+
+                Assistant assistant = aiService.createAssistant(assistantRequest);
+                log.info("Created assistant successfully wit ID: " + assistant.getId());
+                log.debug("Assistant: " + assistant);
+                assistantList.add(new ServiceAssistant(assistant, assistantName, getAssistantFunctionNames(bean)));
+            } catch (IllegalArgumentException ex) {
+                throw new RuntimeException("Illegal model: " + assistantModel);
+            }
+        }
+
+        return assistantList;
+    }
+
+    private List<ServiceAssistant> createServiceAssistants(List<Assistant> assistants) {
+        List<ServiceAssistant> assistantList = new ArrayList<>();
+        Map<String, Object> beans = appContext.getBeansWithAnnotation(AssistantToolProvider.class);
+        for (Object bean : beans.values()) {
+            String assistantName = bean.getClass().getSuperclass().getSimpleName() + "_serviceAgent";
+            try {
+                Assistant assistant;
+                for (Assistant agent : assistants) { // TODO Ugh, should not be looping here.
+                    if (agent.getName().equals(assistantName)) {
+                        assistant = agent;
+                        log.debug("Creating ServiceAssistant instance: " + assistant);
+                        assistantList.add(new ServiceAssistant(assistant, assistantName, getAssistantFunctionNames(bean)));
+                        break;
+                    }
+                }
+            } catch (IllegalArgumentException ex) {
+                throw new RuntimeException("Illegal model: " + assistantModel);
+            }
+        }
+
+        return assistantList;
+    }
+
+    public List<String> getAssistantFunctionNames(Object bean) {
+        List<String> functionNames = new ArrayList<>();
+
+        if (bean == null) {
+            return functionNames;
+        }
+
+        Method[] methods = bean.getClass().getDeclaredMethods();
+
+        for (Method method : methods) {
+            if (method.isSynthetic()) continue;
+            if (method.isAnnotationPresent(FunctionDefinition.class)) {
+                functionNames.add(method.getName());
+            }
+        }
+
+        return functionNames;
+    }
+
+    private List<Tool> getTools(List<ServiceAssistant> assistants) {
+        List<Tool> toolList = new ArrayList<>();
+        for (ServiceAssistant serviceAssistant : assistants) {
+            AssistantFunction assistantFunction = createAssistantFunction(serviceAssistant);
+            log.info("Loading function: " + assistantFunction.getName());
+            toolList.add(new Tool(AssistantToolsEnum.FUNCTION, assistantFunction));
+        }
+        return toolList;
+    }
+
+    private AssistantFunction createAssistantFunction(ServiceAssistant serviceAssistant) {
+        String functionName = serviceAssistant.getAssistantFunctionId();
+        String functionDescription = "Contact point to interact with  " + functionName
+                + " agent. You should give instructions to this agent through calling this function.";
+
+        List<String> instructions = serviceAssistant.getFunctions();
+        StringBuilder sanitizedInstructions = new StringBuilder();
+
+        for (String instruction : instructions) {
+            sanitizedInstructions.append(instruction.replace("\"", "\\\"")).append("\\n");
+        }
+
+        String parameters = "{\n" +
+                "    \"type\": \"object\",\n" +
+                "    \"properties\": {\n" +
+                "        \"instructions\": {\n" +
+                "            \"type\": \"string\",\n" +
+                "            \"description\": \"Natural language instructions to be interpreted by the service agent. Available functions:" + sanitizedInstructions+ "\"\n" +
+                "        }\n" +
+                "    },\n" +
+                "    \"required\": [\"instructions\"]\n" +
+                "}";
+
+        try {
+            return AssistantFunction.builder()
+                    .name(functionName)
+                    .description(functionDescription)
+                    .parameters(buildParameters(parameters))
+                    .build();
+        } catch (JsonProcessingException e) {
+            log.error("Error while creating assistant function for {}: {}", functionName, e.getMessage(), e);
+            throw new RuntimeException(e); // TODO Handle this better.
+        }
+    }
+
+    private List<Tool> getToolsForProvider(Object bean) {
         List<Tool> toolList = new ArrayList<>();
         List<AssistantFunction> functions = new ArrayList<>();
-        Map<String, Object> beans = appContext.getBeansWithAnnotation(AssistantToolProvider.class);
 
-        for (Object bean : beans.values()) {
-            Class<?> beanClass = getBeanClass(bean);
-            Method[] methods = beanClass.getDeclaredMethods();
+        Class<?> beanClass = getBeanClass(bean);
+        if (beanClass.getAnnotation(AssistantToolProvider.class) == null) {
+            throw new IllegalArgumentException("class must be annotated with AssistantToolProvider");
+        }
 
-            for (Method method : methods) {
-                if (method.isSynthetic()) continue;
+        Method[] methods = beanClass.getDeclaredMethods();
 
-                FunctionDefinition functionDefinition = method.getDeclaredAnnotation(FunctionDefinition.class);
-                if (functionDefinition != null) {
-                    AssistantFunction assistantFunction = createAssistantFunction(functionDefinition, method);
-                    if (assistantFunction != null) {
-                        log.info("Loading function: " + assistantFunction.getName());
-                        functions.add(assistantFunction);
-                    }
+        for (Method method : methods) {
+            if (method.isSynthetic()) continue;
+
+            FunctionDefinition functionDefinition = method.getDeclaredAnnotation(FunctionDefinition.class);
+            if (functionDefinition != null) {
+                AssistantFunction assistantFunction = createAssistantProviderFunction(functionDefinition, method);
+                if (assistantFunction != null) {
+                    log.info("Loading function: " + assistantFunction.getName());
+                    functions.add(assistantFunction);
                 }
             }
         }
@@ -375,15 +589,15 @@ public class StandardOpenIAAssistantService implements AssistantService {
         return toolList;
     }
 
-    private AssistantFunction createAssistantFunction(FunctionDefinition functionDefinition, Method method) {
+    private AssistantFunction createAssistantProviderFunction(FunctionDefinition functionDefinition, Method method) {
         String functionName = determineFunctionName(functionDefinition, method);
 
         try {
             return AssistantFunction.builder()
-                    .name(functionName)
-                    .description(functionDefinition.description())
-                    .parameters(buildParameters(functionDefinition.parameters()))
-                    .build();
+                .name(functionName)
+                .description(functionDefinition.description())
+                .parameters(buildParameters(functionDefinition.parameters()))
+                .build();
         } catch (JsonProcessingException e) {
             log.error("Error while creating assistant function for {}: {}", functionName, e.getMessage(), e);
             return null; // or throw a more specific exception if needed
