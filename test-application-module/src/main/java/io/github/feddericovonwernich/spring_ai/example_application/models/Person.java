@@ -1,16 +1,18 @@
 package io.github.feddericovonwernich.spring_ai.example_application.models;
 
-public class Person {
-    private final String name;
-    private final int age;
+import lombok.AllArgsConstructor;
+import lombok.NoArgsConstructor;
 
-    public Person(String name, int age) {
-        this.name = name;
-        this.age = age;
-    }
+@AllArgsConstructor
+@NoArgsConstructor
+public class Person {
+
+    private String name;
+    private int age;
 
     @Override
     public String toString() {
         return "Person{name='" + name + "', age=" + age + "}";
     }
+
 }
