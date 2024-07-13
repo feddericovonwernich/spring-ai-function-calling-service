@@ -245,10 +245,11 @@ public class StandardOpenIAAssistantService implements AssistantService {
                 if (functionDefinition != null) {
                     String functionDefinitionName = determineFunctionName(functionDefinition, method);
                     if (functionDefinitionName.equals(function.getName())) {
-                        log.debug("Function arguments: " + function.getArguments());
+                        log.debug("Function Name: " + function.getName() + " | Function arguments: " + function.getArguments());
                         try {
                             List<Object> arguments
                                     = getArgumentsForMethod(bean, method, function.getName(), function.getArguments());
+                            log.debug("Deserialized arguments: " + arguments);
                             if (arguments == null) return; // Skip execution if argument parsing failed
                             Object result = method.invoke(bean, arguments.toArray());
                             log.debug("Execution result: " + result);
