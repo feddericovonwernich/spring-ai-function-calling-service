@@ -14,19 +14,32 @@ public @interface FunctionDefinition {
 
     /**
      * The name of the function.
+     *
      * @return The name of the function.
      */
     String name() default "unset";
 
     /**
      * A description of the function's purpose.
+     *
      * @return The function description.
      */
     String description();
 
     /**
      * A description of the function's parameters.
+     * Has priority over parameterClass
+     *
      * @return A string detailing the parameters of the function.
      */
-    String parameters();
+    String parameters() default "";
+
+    /**
+     * A class that is annotated with @ParameterClass annotation.
+     *
+     * @return A class
+     */
+    Class<?> parameterClass() default Void.class;
+
+    // TODO Need to implement tests that test this functionality.
 }
