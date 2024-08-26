@@ -14,13 +14,14 @@ deploy:
       maven-central:
         active: ALWAYS
         url: https://s01.oss.sonatype.org/service/local
-        snapshotUrl: https://s01.oss.sonatype.org/content/repositories/snapshots/
+        snapshotUrl: https://s01.oss.sonatype.org/content/repositories/snapshots
         closeRepository: false
         releaseRepository: false
         stagingRepositories:
           - build/staging-deploy
 
 signing:
+  mode: FILE
   active: ALWAYS
   armored: true
 
