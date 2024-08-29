@@ -8,6 +8,7 @@ import org.slf4j.LoggerFactory;
 import java.lang.reflect.Field;
 import java.lang.reflect.ParameterizedType;
 import java.util.*;
+import java.util.stream.Collectors;
 
 public class ParameterClassUtils {
 
@@ -71,33 +72,51 @@ public class ParameterClassUtils {
         String definitionsJsonString = String.join(", ", definitionsTL.get().values());
 
         return switch (parameterClassResolution) {
+
             case INNER -> {
 
                 String typeString;
                 String typeName;
                 if (required) {
-                    typeString = "\"object\"";
+                    typeString = String.format("""
+                        "type": "object",
+                        "properties": %s,
+                        "required": [%s],
+                        "additionalProperties": false
+                    """, propertiesJson, requiredFields
+                    );
+
                     typeName = clazzName;
                 } else {
-                    typeString = "[\"object\", \"null\"]";
+                    typeString = String.format(
+                        """
+                        "anyOf": [
+                            {
+                                "type": "null"
+                            },
+                            {
+                                "type": "object",
+                                "properties": %s,
+                                "required": [%s],
+                                "additionalProperties": false
+                            }
+                        ]
+                        """, propertiesJson, requiredFields
+                    );
                     typeName = clazzName + "NotRequired";
                 }
 
                 yield String.format(
                         """
                             "%s": {
-                                "type": %s,
-                                "properties": %s,
-                                "required": [%s],
-                                "additionalProperties": false
+                                %s
                             }
                         """,
                         typeName,
-                        typeString,
-                        propertiesJson,
-                        requiredFields
+                        typeString
                 );
             }
+
             case MAIN -> {
                 definitionsTL.remove();
                 yield String.format(
@@ -235,6 +254,36 @@ public class ParameterClassUtils {
                         typeName
                 );
             }
+        } else if ("enum".equals(fieldType)) {
+
+            String[] enumValues = Arrays.stream(fieldClass.getEnumConstants())
+                    .map(Object::toString)
+                    .toArray(String[]::new);
+
+            String enumValuesJson = Arrays.stream(enumValues).map(e -> "\"" + e + "\"").collect(Collectors.joining(", "));
+
+            String typeString;
+
+            if (!requiredFields.contains(fieldName)) {
+                typeString = "[\"string\", \"null\"]";
+            } else {
+                typeString = "\"string\"";
+            }
+
+            fieldFormat = String.format(
+                    """
+                        "%s": {
+                            "type": %s,
+                            "description": "%s",
+                            "enum": [%s]
+                        }
+                    """,
+                    fieldName,
+                    typeString,
+                    description,
+                    enumValuesJson
+            );
+
         } else if ("array".equals(fieldType)) {
 
             // TODO Need to handle the case where the array field is also annotated with @Reference
@@ -395,6 +444,8 @@ public class ParameterClassUtils {
             return "number";
         } else if (type.equals(String.class)) {
             return "string";
+        } else if (type.isEnum()) {
+            return "enum";
         } else {
             if (!type.isAnnotationPresent(ParameterClass.class)) {
                 throw new Exception("Type " + type.getSimpleName() + " is not supported because it's not annotated with @ParameterClass.");

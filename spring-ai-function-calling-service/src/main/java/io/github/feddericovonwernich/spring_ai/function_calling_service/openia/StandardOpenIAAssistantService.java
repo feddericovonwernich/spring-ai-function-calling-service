@@ -1,7 +1,6 @@
 package io.github.feddericovonwernich.spring_ai.function_calling_service.openia;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.gson.JsonParser;
@@ -116,7 +115,8 @@ public class StandardOpenIAAssistantService implements AssistantService {
     private final Gson gson;
 
     private final ConcurrentHashMap<String, List<String>> threadContextEntities = new ConcurrentHashMap<>();
-
+    private final ConcurrentHashMap<String, Map<String, String>> agentThreadsForThreadIdMap = new ConcurrentHashMap<>();
+    private final ThreadLocal<String> currentThreadIdTL = new ThreadLocal<>();
 
 
     public StandardOpenIAAssistantService(ApplicationContext appContext, ServiceOpenAI aiService) {
@@ -229,83 +229,90 @@ public class StandardOpenIAAssistantService implements AssistantService {
     @Override
     public String processRequest(String userInput, String threadId) {
 
-        // TODO Need to handle failed requests, like socketTimeout many times or 500 error.
+        currentThreadIdTL.set(threadId);
 
-        if (getIdentifierAssistant() == null) {
+        try {
 
-            // TODO Maybe it's not that bad and we can continue execution without this assistant.
+            // TODO Need to handle failed requests, like socketTimeout many times or 500 error.
 
-            throw new RuntimeException("Unable to get identifier assistant");
-        }
-        if (getOrchestatorAssistant() == null) {
-            throw new RuntimeException("Unable to get an assistant.");
-        }
+            if (getIdentifierAssistant() == null) {
 
-        // Get the thread where it was executing.
-        Thread thread = getThread(threadId);
-        if (thread != null) {
-            List<String> entities = getEntitiesFromUserRequest(userInput);
+                // TODO Maybe it's not that bad and we can continue execution without this assistant.
 
-            /*
-             * Here I'm just appending the definitions to the thread, so the orchestrator assistant has context.
-             */
-            List<String> entitiesDefinition = getJsonDefinitions(entities);
-
-            entitiesDefinition.forEach(definition -> {
-
-                // Parse the name of the object in properties
-                String objectName = parseObjectName(definition);
-
-                // Check if the definition is already in the thread
-                if (!threadContainsDefinition(thread, objectName)) {
-
-                    // Parse keys within the definition's properties
-                    List<String> parsedKeys = parseDefinitionKeys(definition);
-
-                    List<String> threadEntities = threadContextEntities.computeIfAbsent(threadId, k -> new ArrayList<>());
-                    threadEntities.add(objectName);
-                    threadEntities.addAll(parsedKeys);
-
-                    String message = "Entity definition for context: " + definition;
-                    log.debug("Appending message | " + message);
-                    createMessageOnThread(message, thread);
-                }
-            });
-
-            // TODO Right now, we avoid adding a definition that was previously added to the same thread while the program is running
-            //  Note that this lives in memory, so restarting the application would trigger adding the context again.
-            //  Possible improvements:
-            //   - Count tokens so we know when definitions are about to leave the context.
-            //   - Keep a record of how many times an entity was mentioned and try to keep most mentioned ones up to date.
-
-            try {
-                String orchestratorResponseString = processRequestOnThread(userInput, thread, getOrchestatorAssistant());
-
-                // TODO Could have a global ObjectMapper
-                ObjectMapper mapper = new ObjectMapper();
-                JsonNode rootNode = mapper.readTree(orchestratorResponseString);
-
-                // Extract the answer
-                String answer = rootNode.path("answer")
-                        .asText();
-
-                log.debug("Orchestrator answer: " + answer);
-
-                // Extract the reasoning steps and log them
-                String reasoningSteps = rootNode.path("reasoning_steps")
-                        .asText();
-
-                log.debug("Reasoning steps: " + reasoningSteps);
-
-                return answer;
-            } catch (AssistantFailedException a) {
-                return a.getMessage();
-            } catch (Exception e) {
-                log.error("Failed to parse orchestrator response", e);
-                return "Error processing the request. Error: " + e.getMessage();
+                throw new RuntimeException("Unable to get identifier assistant");
             }
-        } else {
-            return "Non-existent thread. Use a valid thread id.";
+            if (getOrchestatorAssistant() == null) {
+                throw new RuntimeException("Unable to get an assistant.");
+            }
+
+            // Get the thread where it was executing.
+            Thread thread = getThread(threadId);
+            if (thread != null) {
+                List<String> entities = getEntitiesFromUserRequest(userInput);
+
+                /*
+                 * Here I'm just appending the definitions to the thread, so the orchestrator assistant has context.
+                 */
+                List<String> entitiesDefinition = getJsonDefinitions(entities);
+
+                entitiesDefinition.forEach(definition -> {
+
+                    // Parse the name of the object in properties
+                    String objectName = parseObjectName(definition);
+
+                    // Check if the definition is already in the thread
+                    if (!threadContainsDefinition(thread, objectName)) {
+
+                        // Parse keys within the definition's properties
+                        List<String> parsedKeys = parseDefinitionKeys(definition);
+
+                        List<String> threadEntities = threadContextEntities.computeIfAbsent(threadId, k -> new ArrayList<>());
+                        threadEntities.add(objectName);
+                        threadEntities.addAll(parsedKeys);
+
+                        String message = "Entity definition for context: " + definition;
+                        log.debug("Appending message | " + message);
+                        createMessageOnThread(message, thread);
+                    }
+                });
+
+                // TODO Right now, we avoid adding a definition that was previously added to the same thread while the program is running
+                //  Note that this lives in memory, so restarting the application would trigger adding the context again.
+                //  Possible improvements:
+                //   - Count tokens so we know when definitions are about to leave the context.
+                //   - Keep a record of how many times an entity was mentioned and try to keep most mentioned ones up to date.
+
+                try {
+                    String orchestratorResponseString = processRequestOnThread(userInput, thread, getOrchestatorAssistant());
+
+                    // TODO Could have a global ObjectMapper
+                    ObjectMapper mapper = new ObjectMapper();
+                    JsonNode rootNode = mapper.readTree(orchestratorResponseString);
+
+                    // Extract the answer
+                    String answer = rootNode.path("answer")
+                            .asText();
+
+                    log.debug("Orchestrator answer: " + answer);
+
+                    // Extract the reasoning steps and log them
+                    String reasoningSteps = rootNode.path("reasoning_steps")
+                            .asText();
+
+                    log.debug("Reasoning steps: " + reasoningSteps);
+
+                    return answer;
+                } catch (AssistantFailedException a) {
+                    return a.getMessage();
+                } catch (Exception e) {
+                    log.error("Failed to parse orchestrator response", e);
+                    return "Error processing the request. Error: " + e.getMessage();
+                }
+            } else {
+                return "Non-existent thread. Use a valid thread id.";
+            }
+        } finally {
+            currentThreadIdTL.remove();
         }
     }
 
@@ -582,7 +589,28 @@ public class StandardOpenIAAssistantService implements AssistantService {
 
                     String agentResponse = null;
                     try {
-                        agentResponse = processRequestOnThread(instructions, createThread(), serviceAssistant.getAssistant());
+
+                        // TODO OW_TODO Here we are maintaining threads for each agent on memory.
+                        //  These should be persisted to database.
+
+                        // Get or create the agents thread map for this thread.
+                        Map<String, String> agentThreadsMap = agentThreadsForThreadIdMap.computeIfAbsent(currentThreadIdTL.get(),
+                                k -> new HashMap<>());
+
+                        // Get or create the thread for the current assistant on this thread.
+                        String agentThreadId = agentThreadsMap.computeIfAbsent(serviceAssistant.getAssistant().getId(),
+                                k -> {
+                            Thread agentThread = createThread();
+                            log.debug("Created thread {} for assistant {} on main thread {}.",
+                                    agentThread.getId(),
+                                    serviceAssistant.getAssistant().getId(),
+                                    currentThreadIdTL.get());
+                            return agentThread.getId();
+                        });
+
+                        Thread agentThread = getThread(agentThreadId);
+
+                        agentResponse = processRequestOnThread(instructions, agentThread, serviceAssistant.getAssistant());
                     } catch (AssistantFailedException e) {
                         log.error("Agent assistant failed: " + e.getMessage());
                         agentResponse = e.getMessage();

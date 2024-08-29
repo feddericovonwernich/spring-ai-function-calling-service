@@ -15,6 +15,10 @@ import java.util.List;
 
 public class ParameterClassUtilsTest {
 
+    public enum TestEnum {
+        VALUEONE, VALUETWO
+    }
+
     @Getter
     @Setter
     @ParameterClass
@@ -42,6 +46,13 @@ public class ParameterClassUtilsTest {
 
         @FieldDescription(description = "A list of strings")
         private List<String> stringList;
+
+        @FieldDescription(description = "Enum test.")
+        private TestEnum enumReference;
+
+        @FieldDescription(description = "Enum test required.")
+        @RequiredField
+        private TestEnum requiredEnum;
 
     }
 
@@ -80,7 +91,7 @@ public class ParameterClassUtilsTest {
 
     }
 
-    private final static String MAIN_CLASS_JSON_STRING = "{\"type\":\"object\",\"properties\":{\"MainClass\":{\"type\":\"object\",\"properties\":{\"nestedClass\":{\"$ref\":\"#/definitions/NestedClass\"},\"exampleNumber\":{\"type\":[\"number\",\"null\"],\"description\":\"An example numeric field\"},\"stringList\":{\"type\":\"array\",\"description\":\"A list of strings\",\"items\":{\"type\":\"string\"}},\"notRequiredNestedClass\":{\"$ref\":\"#/definitions/NestedClassNotRequired\"},\"description\":{\"type\":[\"string\",\"null\"],\"description\":\"A descriptive string field\"},\"referenceNestedClass\":{\"type\":[\"object\",\"null\"],\"description\":\"A nested object that\\u0027s a reference.\",\"properties\":{\"id\":{\"type\":\"string\",\"description\":\"Simple identification field\"}},\"required\":[\"id\"],\"additionalProperties\":false}},\"required\":[\"nestedClass\",\"exampleNumber\",\"stringList\",\"notRequiredNestedClass\",\"description\",\"referenceNestedClass\"],\"additionalProperties\":false}},\"required\":[\"MainClass\"],\"additionalProperties\":false,\"definitions\":{\"NestedClass\":{\"type\":\"object\",\"properties\":{\"secondNestedClassListReference\":{\"type\":\"array\",\"description\":\"A list of SecondNestedClass instances\",\"items\":{\"$ref\":\"#/definitions/SecondNestedClass\"}},\"id\":{\"type\":\"string\",\"description\":\"Simple identification field\"},\"secondNestedClassList\":{\"type\":\"array\",\"description\":\"A list of SecondNestedClass instances\",\"items\":{\"$ref\":\"#/definitions/SecondNestedClass\"}}},\"required\":[\"secondNestedClassListReference\",\"id\",\"secondNestedClassList\"],\"additionalProperties\":false},\"NestedClassNotRequired\":{\"type\":[\"object\",\"null\"],\"properties\":{\"secondNestedClassListReference\":{\"type\":\"array\",\"description\":\"A list of SecondNestedClass instances\",\"items\":{\"$ref\":\"#/definitions/SecondNestedClass\"}},\"id\":{\"type\":\"string\",\"description\":\"Simple identification field\"},\"secondNestedClassList\":{\"type\":\"array\",\"description\":\"A list of SecondNestedClass instances\",\"items\":{\"$ref\":\"#/definitions/SecondNestedClass\"}}},\"required\":[\"secondNestedClassListReference\",\"id\",\"secondNestedClassList\"],\"additionalProperties\":false},\"SecondNestedClass\":{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\",\"description\":\"Simple identification field\"},\"counter\":{\"type\":[\"number\",\"null\"],\"description\":\"A simple counter to test references.\"}},\"required\":[\"id\",\"counter\"],\"additionalProperties\":false}}}";
+    private final static String MAIN_CLASS_JSON_STRING = "{\"type\":\"object\",\"properties\":{\"MainClass\":{\"type\":\"object\",\"properties\":{\"nestedClass\":{\"$ref\":\"#/definitions/NestedClass\"},\"enumReference\":{\"type\":[\"string\",\"null\"],\"description\":\"Enum test.\",\"enum\":[\"VALUEONE\",\"VALUETWO\"]},\"exampleNumber\":{\"type\":[\"number\",\"null\"],\"description\":\"An example numeric field\"},\"requiredEnum\":{\"type\":\"string\",\"description\":\"Enum test required.\",\"enum\":[\"VALUEONE\",\"VALUETWO\"]},\"stringList\":{\"type\":\"array\",\"description\":\"A list of strings\",\"items\":{\"type\":\"string\"}},\"notRequiredNestedClass\":{\"$ref\":\"#/definitions/NestedClassNotRequired\"},\"description\":{\"type\":[\"string\",\"null\"],\"description\":\"A descriptive string field\"},\"referenceNestedClass\":{\"type\":[\"object\",\"null\"],\"description\":\"A nested object that\\u0027s a reference.\",\"properties\":{\"id\":{\"type\":\"string\",\"description\":\"Simple identification field\"}},\"required\":[\"id\"],\"additionalProperties\":false}},\"required\":[\"nestedClass\",\"enumReference\",\"exampleNumber\",\"requiredEnum\",\"stringList\",\"notRequiredNestedClass\",\"description\",\"referenceNestedClass\"],\"additionalProperties\":false}},\"required\":[\"MainClass\"],\"additionalProperties\":false,\"definitions\":{\"NestedClass\":{\"type\":\"object\",\"properties\":{\"secondNestedClassListReference\":{\"type\":\"array\",\"description\":\"A list of SecondNestedClass instances\",\"items\":{\"$ref\":\"#/definitions/SecondNestedClass\"}},\"id\":{\"type\":\"string\",\"description\":\"Simple identification field\"},\"secondNestedClassList\":{\"type\":\"array\",\"description\":\"A list of SecondNestedClass instances\",\"items\":{\"$ref\":\"#/definitions/SecondNestedClass\"}}},\"required\":[\"secondNestedClassListReference\",\"id\",\"secondNestedClassList\"],\"additionalProperties\":false},\"NestedClassNotRequired\":{\"anyOf\":[{\"type\":\"null\"},{\"type\":\"object\",\"properties\":{\"secondNestedClassListReference\":{\"type\":\"array\",\"description\":\"A list of SecondNestedClass instances\",\"items\":{\"$ref\":\"#/definitions/SecondNestedClass\"}},\"id\":{\"type\":\"string\",\"description\":\"Simple identification field\"},\"secondNestedClassList\":{\"type\":\"array\",\"description\":\"A list of SecondNestedClass instances\",\"items\":{\"$ref\":\"#/definitions/SecondNestedClass\"}}},\"required\":[\"secondNestedClassListReference\",\"id\",\"secondNestedClassList\"],\"additionalProperties\":false}]},\"SecondNestedClass\":{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\",\"description\":\"Simple identification field\"},\"counter\":{\"type\":[\"number\",\"null\"],\"description\":\"A simple counter to test references.\"}},\"required\":[\"id\",\"counter\"],\"additionalProperties\":false}}}";
 
     @Test
     public void getParameterClassStringTest() {
