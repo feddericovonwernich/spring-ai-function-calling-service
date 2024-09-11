@@ -584,10 +584,8 @@ public class StandardOpenIAAssistantService implements AssistantService {
 
                     String instructions = descriptionElement.getAsString();
 
-                    // TODO Here too I'm creating a new thread for each assistant call,
-                    //  could look into optimizing or make different assistants use the same thread.
-
                     String agentResponse = null;
+
                     try {
 
                         // TODO OW_TODO Here we are maintaining threads for each agent on memory.
