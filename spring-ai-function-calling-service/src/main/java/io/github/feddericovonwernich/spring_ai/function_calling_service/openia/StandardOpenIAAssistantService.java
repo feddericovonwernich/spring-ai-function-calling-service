@@ -474,7 +474,7 @@ public class StandardOpenIAAssistantService implements AssistantService {
         // TODO Make these configurable.
         int maxRetries = 5;
         int retryCount = 0;
-        long backoffTime = 5000L; // Initial backoff time in milliseconds
+        long backoffTime = 10000L; // Initial backoff time in milliseconds
 
         while (true) {
             if (retrievedRun.getStatus().equals("requires_action")) {
@@ -501,9 +501,16 @@ public class StandardOpenIAAssistantService implements AssistantService {
                         try {
                             log.warn("{} encountered. Retrying in {} ms...", errorType, backoffTime);
                             java.lang.Thread.sleep(backoffTime);
-                            backoffTime *= 2; // Exponentially increase the backoff time
+
+                            // Exponentially increase the backoff time
+                            backoffTime *= 2;
+
+                            // We need to get the run again, otherwise we're always looping through the same run.
+                            retrievedRun = waitForRun(thread, run, retrievedRun);
+
+                            // Retry the loop
                             retryCount++;
-                            continue; // Retry the loop
+                            continue;
                         } catch (InterruptedException e) {
                             log.error("Backoff interrupted", e);
                             java.lang.Thread.currentThread().interrupt();
@@ -991,7 +998,7 @@ public class StandardOpenIAAssistantService implements AssistantService {
         List<String> instructions = serviceAssistant.getFunctions();
         StringBuilder sanitizedInstructions = new StringBuilder();
 
-        // TODO Can probably add a description for each function. We do have the descriptions.
+
 
         for (String instruction : instructions) {
             sanitizedInstructions.append(instruction.replace("\"", "\\\"")).append("\\n");
