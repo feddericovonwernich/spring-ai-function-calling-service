@@ -112,6 +112,7 @@ public class StandardOpenIAAssistantService implements AssistantService {
     private Set<Class<?>> parameterClasses;
 
     private final ThreadLocal<Boolean> assistantFailed = new ThreadLocal<>();
+    private final ThreadLocal<Boolean> rateLimitHit = new ThreadLocal<>();
     private final Gson gson;
 
     private final ConcurrentHashMap<String, List<String>> threadContextEntities = new ConcurrentHashMap<>();
@@ -434,8 +435,51 @@ public class StandardOpenIAAssistantService implements AssistantService {
         Run run = createRunForThread(thread, assistant);
         Run retrievedRun = aiService.retrieveRun(thread.getId(), run.getId());
         retrievedRun = waitForRun(thread, run, retrievedRun);
-
         processActions(retrievedRun, thread, run);
+
+        // If rate limit is hit, need to retry here.
+        if (rateLimitHit.get() != null && rateLimitHit.get()) {
+
+            // TODO Make these configurable.
+            int maxRetries = 5;
+            int retryCount = 0;
+            long backoffTMillisime = 20000L; // Initial backoff time
+
+            while (true) {
+                rateLimitHit.set(false);
+
+                // Assign the thread to the assistant.
+                run = createRunForThread(thread, assistant);
+                retrievedRun = aiService.retrieveRun(thread.getId(), run.getId());
+                retrievedRun = waitForRun(thread, run, retrievedRun);
+                processActions(retrievedRun, thread, run);
+
+                if (rateLimitHit.get()) {
+                    if (retryCount < maxRetries) {
+                        try {
+                            log.warn("Rate Limit encountered. Retrying in {} ms...", backoffTMillisime);
+                            java.lang.Thread.sleep(backoffTMillisime);
+
+                            // Exponentially increase the backoff time
+                            backoffTMillisime *= 2;
+
+                            // Retry the loop
+                            retryCount++;
+                        } catch (InterruptedException e) {
+                            log.error("Backoff interrupted", e);
+                            java.lang.Thread.currentThread().interrupt();
+                        }
+                    } else {
+                        log.error("Max retries reached due to rate limit. Giving up.");
+                        assistantFailed.set(true);
+                        break;
+
+                        // TODO Should tell the user that we're busy, or maybe don't tell anything,
+                        //  and go into a list to process when load is less.
+                    }
+                }
+            }
+        }
 
         if (assistantFailed.get() != null && assistantFailed.get()) {
             String errorMessage = "Request was sent, but assistant failed to process it. Assistant Id: " + assistant.getId();
@@ -471,60 +515,35 @@ public class StandardOpenIAAssistantService implements AssistantService {
     }
 
     private void processActions(Run retrievedRun, Thread thread, Run run) {
-        // TODO Make these configurable.
-        int maxRetries = 5;
-        int retryCount = 0;
-        long backoffTime = 10000L; // Initial backoff time in milliseconds
 
-        while (true) {
-            if (retrievedRun.getStatus().equals("requires_action")) {
-                List<SubmitToolOutputRequestItem> toolOutputRequestItems = getSubmitToolOutputRequestItems(retrievedRun);
-                SubmitToolOutputsRequest submitToolOutputsRequest = SubmitToolOutputsRequest.builder()
-                        .toolOutputs(toolOutputRequestItems)
-                        .build();
-                retrievedRun = aiService.submitToolOutputs(retrievedRun.getThreadId(), retrievedRun.getId(),
-                        submitToolOutputsRequest);
-                retrievedRun = waitForRun(thread, run, retrievedRun);
-                processActions(retrievedRun, thread, run);
-            }
+        if (retrievedRun.getStatus().equals("requires_action")) {
+            List<SubmitToolOutputRequestItem> toolOutputRequestItems = getSubmitToolOutputRequestItems(retrievedRun);
+            SubmitToolOutputsRequest submitToolOutputsRequest = SubmitToolOutputsRequest.builder()
+                    .toolOutputs(toolOutputRequestItems)
+                    .build();
+            retrievedRun = aiService.submitToolOutputs(retrievedRun.getThreadId(), retrievedRun.getId(),
+                    submitToolOutputsRequest);
+            retrievedRun = waitForRun(thread, run, retrievedRun);
+            processActions(retrievedRun, thread, run);
+        }
 
-            if (retrievedRun.getStatus().equals("failed")) {
-                log.error("Run failed. Message: {}", retrievedRun.getLastError().getMessage());
-                log.warn(retrievedRun.getLastError().getCode());
+        if (retrievedRun.getStatus().equals("failed")) {
+            log.error("Run failed. Message: {}", retrievedRun.getLastError().getMessage());
+            log.warn(retrievedRun.getLastError().getCode());
 
-                if (retrievedRun.getLastError().getCode().equals("rate_limit_exceeded") ||
-                        retrievedRun.getLastError().getCode().equals("server_error")) {
+            if (retrievedRun.getLastError().getCode().equals("rate_limit_exceeded") ||
+                    retrievedRun.getLastError().getCode().equals("server_error")) {
 
-                    String errorType = retrievedRun.getLastError().getCode().equals("rate_limit_exceeded") ? "Rate limit exceeded" : "Server error";
+                String errorType = retrievedRun.getLastError().getCode().equals("rate_limit_exceeded") ? "Rate limit exceeded" : "Server error";
 
-                    if (retryCount < maxRetries) {
-                        try {
-                            log.warn("{} encountered. Retrying in {} ms...", errorType, backoffTime);
-                            java.lang.Thread.sleep(backoffTime);
+                log.warn("{} encountered.", errorType);
 
-                            // Exponentially increase the backoff time
-                            backoffTime *= 2;
-
-                            // We need to get the run again, otherwise we're always looping through the same run.
-                            retrievedRun = waitForRun(thread, run, retrievedRun);
-
-                            // Retry the loop
-                            retryCount++;
-                            continue;
-                        } catch (InterruptedException e) {
-                            log.error("Backoff interrupted", e);
-                            java.lang.Thread.currentThread().interrupt();
-                        }
-                    } else {
-                        log.error("Max retries reached due to {}. Giving up.", errorType);
-                    }
+                if (errorType.equals("Rate limit exceeded")) {
+                    rateLimitHit.set(true);
+                } else {
+                    assistantFailed.set(true);
                 }
-
-                assistantFailed.set(true);
-                break; // Exit the loop if failed with no retry or other errors
             }
-
-            break; // Exit the loop if no further action is required or after retries
         }
     }
 
