@@ -446,14 +446,6 @@ public class StandardOpenIAAssistantService implements AssistantService {
             long backoffTMillisime = 20000L; // Initial backoff time
 
             while (true) {
-                rateLimitHit.set(false);
-
-                // Assign the thread to the assistant.
-                run = createRunForThread(thread, assistant);
-                retrievedRun = aiService.retrieveRun(thread.getId(), run.getId());
-                retrievedRun = waitForRun(thread, run, retrievedRun);
-                processActions(retrievedRun, thread, run);
-
                 if (rateLimitHit.get()) {
                     if (retryCount < maxRetries) {
                         try {
@@ -463,10 +455,20 @@ public class StandardOpenIAAssistantService implements AssistantService {
                             // Exponentially increase the backoff time
                             backoffTMillisime *= 2;
 
-                            // Retry the loop
+                            // Mark that we've used an attempt.
                             retryCount++;
+
+                            // Reset the condition.
+                            rateLimitHit.set(false);
+
+                            // Try again
+                            run = createRunForThread(thread, assistant);
+                            retrievedRun = aiService.retrieveRun(thread.getId(), run.getId());
+                            retrievedRun = waitForRun(thread, run, retrievedRun);
+                            processActions(retrievedRun, thread, run);
+
                         } catch (InterruptedException e) {
-                            log.error("Backoff interrupted", e);
+                            log.error("Retry interrupted", e);
                             java.lang.Thread.currentThread().interrupt();
                         }
                     } else {
