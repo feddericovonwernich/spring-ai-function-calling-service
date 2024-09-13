@@ -705,9 +705,11 @@ public class StandardOpenIAAssistantService implements AssistantService {
         log.error("Error during function execution: {}", e.getMessage(), e);
 
         if (e instanceof InvocationTargetException targetException) {
-            functionResponse.set(targetException.getTargetException().getMessage());
+            functionResponse.set("ERROR: Do not re-attempt! Message: "
+                    + targetException.getTargetException().getMessage());
         } else {
-            functionResponse.set(e.getMessage());
+            functionResponse.set("ERROR: Do not re-attempt! Message: "
+                    + e.getMessage());
         }
     }
 
