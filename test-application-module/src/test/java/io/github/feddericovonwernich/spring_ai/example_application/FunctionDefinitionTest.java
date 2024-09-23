@@ -1,8 +1,7 @@
 package io.github.feddericovonwernich.spring_ai.example_application;
 
 import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.StandardOpenIAAssistantService;
-import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.assistants.Tool;
-import org.junit.jupiter.api.Test;
+import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.api.assistants.Tool;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;

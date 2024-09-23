@@ -1,5 +1,14 @@
 package io.github.feddericovonwernich.spring_ai.function_calling_service.spi;
 
+import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.api.assistants.Assistant;
+import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.api.runs.ToolCallFunction;
+import io.github.feddericovonwernich.spring_ai.function_calling_service.spi.async.AssistantRequestInteraction;
+import io.github.feddericovonwernich.spring_ai.function_calling_service.spi.async.AssistantResponseInteraction;
+
+import java.util.Map;
+import java.util.concurrent.Callable;
+import java.util.function.Function;
+
 /**
  * Provides services for processing user requests through an AI model.
  * This interface defines the capabilities of an assistant service
@@ -7,22 +16,17 @@ package io.github.feddericovonwernich.spring_ai.function_calling_service.spi;
  *
  * @author Federico von Wernich
  */
-public interface AssistantService {
+public interface AssistantService<AssistantType> {
 
-    /**
-     * Is able to process a user request using underlying AI model.
-     *
-     * @param userInput The input provided by the user.
-     * @return The processed string response.
-     */
-    AssistantResponse processRequest(String userInput);
+    void setSystemFunction(Function<ToolCallFunction, String> function, String functionId);
 
-    /**
-     * Is able to process a user request using underlying AI model. Follow the conversation from the given thread id.
-     *
-     * @param userInput The input provided by the user.
-     * @param threadId  The identifier for the processing thread.
-     * @return The processed string response.
-     */
-    String processRequest(String userInput, String threadId);
+    Assistant getOrCreateAssistant(AssistantDefinition definition);
+
+    Assistant createAssistant(AssistantDefinition definition);
+
+    String processRequest(String prompt, AssistantType assistantType) throws AssistantFailedException;
+
+    String processRequest(String prompt, AssistantType assistantType, Map<String, ?> context) throws AssistantFailedException;
+
+
 }

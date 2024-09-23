@@ -17,14 +17,14 @@ public class NaturalLanguageRestController {
     @Autowired
     private AssistantService assistantService;
 
-    @GetMapping
-    public ResponseEntity<AssistantResponse> processUserRequest(@RequestParam String request) {
-        return ResponseEntity.ok(assistantService.processRequest(request));
-    }
+//    @GetMapping
+//    public ResponseEntity<AssistantResponse> processUserRequest(@RequestParam String request) {
+//        return ResponseEntity.ok(assistantService.processRequest(request));
+//    }
 
-    @GetMapping("/{threadId}")
-    public ResponseEntity<String> processUserRequestOnThread(@RequestParam String request, @PathVariable String threadId) {
-        return ResponseEntity.ok(assistantService.processRequest(request, threadId));
-    }
+//    @GetMapping("/{threadId}")
+//    public ResponseEntity<String> processUserRequestOnThread(@RequestParam String request, @PathVariable String threadId) {
+//        return ResponseEntity.ok(assistantService.processRequest(request, threadId));
+//    }
 
 }

@@ -1,15 +1,17 @@
 package io.github.feddericovonwernich.spring_ai.function_calling_service.openia.api;
 
+import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.api.assistants.*;
+import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.api.runs.*;
 import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.assistants.*;
-import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.common.DeleteResult;
-import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.common.OpenAiResponse;
-import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.messages.Message;
-import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.messages.MessageFile;
-import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.messages.MessageRequest;
-import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.messages.ModifyMessageRequest;
+import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.api.common.DeleteResult;
+import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.api.common.OpenAiResponse;
+import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.api.messages.Message;
+import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.api.messages.MessageFile;
+import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.api.messages.MessageRequest;
+import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.api.messages.ModifyMessageRequest;
 import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.runs.*;
-import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.threads.ThreadRequest;
-import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.threads.Thread;
+import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.api.threads.ThreadRequest;
+import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.api.threads.Thread;
 import io.reactivex.rxjava3.core.Single;
 import retrofit2.http.*;
 
