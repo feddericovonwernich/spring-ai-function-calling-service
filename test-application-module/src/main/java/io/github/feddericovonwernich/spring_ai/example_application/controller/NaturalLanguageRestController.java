@@ -9,9 +9,9 @@ import org.springframework.context.annotation.Conditional;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-@RestController
-@RequestMapping("/ai")
-@Conditional({OpenIAKeyPresentCondition.class, AssistantEnabledCondition.class})
+//@RestController
+//@RequestMapping("/ai")
+//@Conditional({OpenIAKeyPresentCondition.class, AssistantEnabledCondition.class})
 public class NaturalLanguageRestController {
 
     @Autowired

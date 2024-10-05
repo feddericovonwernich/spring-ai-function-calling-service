@@ -1,11 +1,9 @@
 package io.github.feddericovonwernich.spring_ai.function_calling_service.spi.async;
 
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.Getter;
+import lombok.*;
 
 @Getter
+@ToString
 public class AssistantInteraction {
 
     private final Long runId;

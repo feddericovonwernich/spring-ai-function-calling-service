@@ -1,1 +1,2 @@
+io.github.feddericovonwernich.spring_ai.function_calling_service.openia.config.RepositoriesConfiguration
 io.github.feddericovonwernich.spring_ai.function_calling_service.openia.config.OpenIAServiceAutoConfiguration

@@ -3,6 +3,7 @@ package io.github.feddericovonwernich.spring_ai.function_calling_service.spi.asy
 import io.github.feddericovonwernich.spring_ai.function_calling_service.spi.AssistantFailedException;
 import io.github.feddericovonwernich.spring_ai.function_calling_service.spi.chain.AssistantChain;
 import jakarta.annotation.PreDestroy;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -15,6 +16,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 @Component
+@Slf4j
 public class AssistantServiceRequestConsumer {
 
     @Value("${assistant.consumer.maxThreads:1}")
@@ -39,6 +41,7 @@ public class AssistantServiceRequestConsumer {
     }
 
     private void startConsuming() {
+        log.debug("Starting AssistantServiceRequestConsumer with {} workers.", maxThreads);
         for (int i = 0; i < maxThreads; i++) {
             executorService.submit(new Worker());
         }
@@ -49,8 +52,9 @@ public class AssistantServiceRequestConsumer {
         shutdown.set(true);
         executorService.shutdown();
 
+        // TODO This shut down waiting needs to be configurable.
         try {
-            if (!executorService.awaitTermination(180, TimeUnit.SECONDS)) {
+            if (!executorService.awaitTermination(10, TimeUnit.MILLISECONDS)) {
                 executorService.shutdownNow();
             }
         } catch (InterruptedException e) {
@@ -62,10 +66,30 @@ public class AssistantServiceRequestConsumer {
     private class Worker implements Runnable {
         @Override
         public void run() {
+            log.debug("Starting worker on thread: {}", Thread.currentThread().getName());
             while (!shutdown.get()) {
-                AssistantRequestInteraction interaction = requestQueue.dequeue();
-                if (interaction != null) {
-                    processInteraction(interaction);
+                if (!requestQueue.isEmpty()) {
+                    log.debug("Queue is not empty, consuming requests.");
+                    while (!requestQueue.isEmpty()) {
+                        AssistantRequestInteraction interaction = requestQueue.dequeue();
+                        if (interaction != null) {
+                            try {
+                                processInteraction(interaction);
+                            } catch (Exception e) {
+                                log.error("Error while processing an item from the queue.", e);
+                            }
+                        }
+                    }
+                } else {
+                    // TODO Make this configurable.
+                    // We wait a configurable amount of time to wait for requests.
+                    long waitMillis = 1000L;
+                    log.debug("Queue is empty, sleeping {} millis to wait for requests...", waitMillis);
+                    try {
+                        Thread.sleep(waitMillis);
+                    } catch (InterruptedException e) {
+                        throw new RuntimeException(e);
+                    }
                 }
             }
         }
@@ -74,18 +98,18 @@ public class AssistantServiceRequestConsumer {
     private void processInteraction(AssistantRequestInteraction request) {
         AssistantResponseInteraction responseInteraction = null;
         try {
-            responseInteraction = assistantChain.runThroughChain(request.getUserRequest(), request.getRunId());
+            responseInteraction = assistantChain.runThroughChain(request.getAssistantChainRun(), request.getRunId());
         } catch (AssistantFailedException e) {
-            // TODO Here's where I need to handle any error being hit.
-            //  If it's not rate limit, then we'd want the response.
-
             if (e.isRateLimited()) {
-                // We enqueue the request again for processing.
-                // TODO I'd like to mark the request somehow as rate limited, maybe put it in another queue.
-                requestQueue.enqueue(request);
 
-                // We wait some time.
-                // TODO Maybe make this configurable or dynamic / exponential backoff.
+                // We're saving the assistantChainRun we're retrying for in the new assistantChainRun.
+                // I hope to use that later to find the original runId for the user request.
+
+                // We enqueue the request again for processing. // TODO I'd like to mark the request somehow as rate limited, maybe put it in another queue.
+                AssistantQueueRequest assistantQueueRequest = getAssistantQueueRequest(request);
+                requestQueue.enqueue(assistantQueueRequest);
+
+                // We wait some time. // TODO Maybe make this configurable or dynamic / exponential backoff.
                 try {
                     Thread.sleep(Duration.of(1, ChronoUnit.MINUTES));
                 } catch (InterruptedException ex) {
@@ -103,6 +127,15 @@ public class AssistantServiceRequestConsumer {
         if (responseInteraction != null) {
             responseQueue.enqueue(responseInteraction);
         }
+    }
+
+    private static AssistantQueueRequest getAssistantQueueRequest(AssistantRequestInteraction request) {
+        String originalPrompt = request.getAssistantChainRun()
+                .getMessages()
+                .getFirst();
+        Long lastRunId = request.getAssistantChainRun()
+                .getId();
+        return new AssistantQueueRequest(originalPrompt, lastRunId, request.getAssistantChainRun());
     }
 
 }

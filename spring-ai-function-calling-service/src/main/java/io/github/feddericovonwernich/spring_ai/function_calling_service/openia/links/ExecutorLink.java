@@ -14,6 +14,7 @@ import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.S
 import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.api.assistants.*;
 import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.api.runs.ToolCallFunction;
 import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.api.service.ServiceOpenAI;
+import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.links.models.OpenAIAssistantReference;
 import io.github.feddericovonwernich.spring_ai.function_calling_service.spi.AssistantDefinition;
 import io.github.feddericovonwernich.spring_ai.function_calling_service.spi.AssistantFailedException;
 import io.github.feddericovonwernich.spring_ai.function_calling_service.spi.AssistantService;
@@ -58,17 +59,15 @@ public class ExecutorLink implements AssistantChainLink<Assistant> {
 
     private final AssistantService<Assistant> assistantService;
     private final FunctionDefinitionsService functionDefinitionsService;
-    private final ServiceOpenAI aiService;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private Assistant assistant;
     private final Map<String, ServiceAssistant> serviceAssistants = new HashMap<>();
 
     public ExecutorLink(AssistantService<Assistant> assistantService,
-                        FunctionDefinitionsService functionDefinitionsService, ServiceOpenAI aiService) {
+                        FunctionDefinitionsService functionDefinitionsService) {
         this.assistantService = assistantService;
         this.functionDefinitionsService = functionDefinitionsService;
-        this.aiService = aiService;
     }
 
     @Override
@@ -178,23 +177,15 @@ public class ExecutorLink implements AssistantChainLink<Assistant> {
         String serviceName = toolProvider.getSimpleName();
         String assistantName = getAssistantFunctionName(toolProvider);
 
-        AssistantRequest assistantRequest = AssistantRequest.builder()
-                .model(AGENT_ASSISTANT_MODEL)
+        OpenAIAssistantDefinition assistantDefinition = OpenAIAssistantDefinition.builder()
                 .description("Specialized assistant to interact with " + serviceName)
+                .model(AGENT_ASSISTANT_MODEL)
                 .name(assistantName)
-                .instructions(AGENT_ASSISTANT_PROMPT)
-                .temperature(0.00)
-                .tools(toolList)
+                .prompt(AGENT_ASSISTANT_PROMPT)
+                .toolList(toolList)
                 .build();
 
-        log.debug("AgentAssistant prompt: {}", AGENT_ASSISTANT_PROMPT);
-        log.debug("Tool list: {}", toolList);
-
-        Assistant assistant = aiService.createAssistant(assistantRequest);
-
-        log.info("Created assistant successfully wit ID: " + assistant.getId());
-
-        return assistant;
+        return assistantService.getOrCreateAssistant(assistantDefinition);
     }
 
     private List<Tool> getToolsForProvider(Class<?> toolProvider) {
@@ -214,7 +205,7 @@ public class ExecutorLink implements AssistantChainLink<Assistant> {
             if (functionDefinition != null) {
                 AssistantFunction assistantFunction = createAssistantProviderFunction(functionDefinition, method);
                 if (assistantFunction != null) {
-                    log.info("Loading function: " + assistantFunction.getName());
+                    log.debug("Loading function: " + assistantFunction.getName());
                     functions.add(assistantFunction);
                 }
             }

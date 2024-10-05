@@ -28,18 +28,12 @@ public class AssistantChainImpl implements AssistantChain {
 
     @Override
     @Transactional
-    public AssistantResponseInteraction runThroughChain(String prompt, Long lastRunId) throws AssistantFailedException {
-
-        AssistantChainRun assistantChainRun = AssistantChainRun.builder()
-                .status(RunStatus.CREATED)
-                .message(prompt)
-                .build();
-
-        assistantChainRunRepository.save(assistantChainRun);
+    public AssistantResponseInteraction runThroughChain(AssistantChainRun assistantChainRun, Long lastRunId) throws AssistantFailedException {
 
         String response = null;
         try {
             for (AssistantChainLink chainLink : chainLinks) {
+                log.debug("Processing for link {}", chainLink.getClass().getSimpleName());
                 response = chainLink.process(assistantChainRun, lastRunId);
                 // Go through the chain and break if a link ask for user action.
                 if (assistantChainRun.getStatus().equals(RunStatus.USER_ACTION)) break;
@@ -56,7 +50,7 @@ public class AssistantChainImpl implements AssistantChain {
             response = "Sorry, an unexpected error happened, administrator will be warned about this interaction.";
 
             assistantChainRun.setStatus(RunStatus.FAILED);
-            assistantChainRun.getMessages().add(response + " | ExceptionMessage: " + e.getMessage());
+            assistantChainRun.addMessage(response + " | ExceptionMessage: " + e.getMessage());
 
             // We let the caller decide how to handle the error.
             if (e instanceof AssistantFailedException) {

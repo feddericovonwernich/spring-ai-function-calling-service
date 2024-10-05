@@ -2,13 +2,14 @@ package io.github.feddericovonwernich.spring_ai.function_calling_service.openia.
 
 
 import jakarta.persistence.*;
-import lombok.Builder;
-import lombok.Getter;
+import lombok.*;
 
 @Entity
 @Table(name = "semantic_thread")
 @Builder
 @Getter
+@ToString@AllArgsConstructor
+@NoArgsConstructor
 public class SemanticThread {
 
     @Id

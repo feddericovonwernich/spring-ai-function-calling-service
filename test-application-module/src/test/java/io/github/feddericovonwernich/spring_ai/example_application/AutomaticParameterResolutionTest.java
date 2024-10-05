@@ -3,6 +3,8 @@ package io.github.feddericovonwernich.spring_ai.example_application;
 import io.github.feddericovonwernich.spring_ai.example_application.models.Person;
 import io.github.feddericovonwernich.spring_ai.example_application.services.FunctionDefinitionTestService;
 import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.StandardOpenIAAssistantService;
+import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.api.assistants.Assistant;
+import io.github.feddericovonwernich.spring_ai.function_calling_service.spi.AssistantService;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,10 +20,10 @@ import static org.junit.jupiter.api.Assertions.fail;
 @SpringBootTest
 @ActiveProfiles("true-with-key")
 @TestPropertySource(locations = "classpath:application-true-with-key.yml")
-public class AutomaticParameterResolutionTest {
+public class AutomaticParameterResolutionTest extends BasicApplicationIntegrationTest {
 
     @Autowired
-    private StandardOpenIAAssistantService standardOpenIAAssistantService;
+    AssistantService<Assistant> assistantService;
 
     @Autowired
     private FunctionDefinitionTestService testService;
@@ -36,7 +38,7 @@ public class AutomaticParameterResolutionTest {
 
             Method getArgumentsForMethod = StandardOpenIAAssistantService.class.getDeclaredMethod("getArgumentsForMethod", Object.class, Method.class, String.class, String.class);
             getArgumentsForMethod.setAccessible(true);
-            List<Object> argumentsList = (List<Object>) getArgumentsForMethod.invoke(standardOpenIAAssistantService, testService, methodArgument, "TestService_generateGreeting", parameters);
+            List<Object> argumentsList = (List<Object>) getArgumentsForMethod.invoke(assistantService, testService, methodArgument, "TestService_generateGreeting", parameters);
 
             Assertions.assertEquals(2, argumentsList.size());
             Assertions.assertTrue(argumentsList.get(0) instanceof String);
@@ -56,7 +58,7 @@ public class AutomaticParameterResolutionTest {
 
             Method getArgumentsForMethod = StandardOpenIAAssistantService.class.getDeclaredMethod("getArgumentsForMethod", Object.class, Method.class, String.class, String.class);
             getArgumentsForMethod.setAccessible(true);
-            List<Object> argumentsList = (List<Object>) getArgumentsForMethod.invoke(standardOpenIAAssistantService, testService, methodArgument, "TestService_printPersonInfo", parameters);
+            List<Object> argumentsList = (List<Object>) getArgumentsForMethod.invoke(assistantService, testService, methodArgument, "TestService_printPersonInfo", parameters);
 
             Assertions.assertEquals(1, argumentsList.size());
             Assertions.assertTrue(argumentsList.get(0) instanceof Person);
@@ -75,7 +77,7 @@ public class AutomaticParameterResolutionTest {
 
             Method getArgumentsForMethod = StandardOpenIAAssistantService.class.getDeclaredMethod("getArgumentsForMethod", Object.class, Method.class, String.class, String.class);
             getArgumentsForMethod.setAccessible(true);
-            List<Object> argumentsList = (List<Object>) getArgumentsForMethod.invoke(standardOpenIAAssistantService, testService, methodArgument, "TestService_concatenateList", parameters);
+            List<Object> argumentsList = (List<Object>) getArgumentsForMethod.invoke(assistantService, testService, methodArgument, "TestService_concatenateList", parameters);
 
             Assertions.assertEquals(1, argumentsList.size());
             Assertions.assertTrue(argumentsList.get(0) instanceof List);

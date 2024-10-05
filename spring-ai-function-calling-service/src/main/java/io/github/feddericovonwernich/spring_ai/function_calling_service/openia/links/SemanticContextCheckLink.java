@@ -78,12 +78,13 @@ public class SemanticContextCheckLink implements AssistantChainLink<Assistant> {
     @Override
     public String process(AssistantChainRun assistantChainRun, Long lastRunId) throws AssistantFailedException {
 
-        AssistantChainRun lastChainRun;
-        try {
-            lastChainRun = assistantChainRunRepository.getReferenceById(lastRunId);
-        } catch (EntityNotFoundException e) {
-            lastChainRun = null;
-            log.warn("Non-existent lastRunId: {}, treating request as without context.", lastRunId);
+        AssistantChainRun lastChainRun = null;
+        if (lastRunId != null) {
+            try {
+                lastChainRun = assistantChainRunRepository.getReferenceById(lastRunId);
+            } catch (EntityNotFoundException e) {
+                log.warn("Non-existent lastRunId: {}, treating request as without context.", lastRunId);
+            }
         }
 
         SemanticThread semanticThread;
@@ -135,7 +136,7 @@ public class SemanticContextCheckLink implements AssistantChainLink<Assistant> {
             }
         }
 
-        assistantChainRun.getMessages().add(response);
+        assistantChainRun.addMessage(response);
 
         // TODO Technically, AssistantChainRun should not have knowledge about SemanticThread.
         //  Ideally, we should be setting this SemanticThread in some Chain Context.

@@ -6,8 +6,6 @@ import org.springframework.stereotype.Repository;
 import java.util.Optional;
 
 @Repository
-public interface OrchestratorThreadRepository extends JpaRepository<OrchestratorThread, Long> {
-
-    Optional<OrchestratorThread> findBySemanticThreadAndStatusNot(SemanticThread semanticThread, OrchestratorThreadStatus status);
-
+public interface OpenAIAssistantReferenceRepository extends JpaRepository<OpenAIAssistantReference, Long> {
+    Optional<OpenAIAssistantReference> findByName(String name);
 }

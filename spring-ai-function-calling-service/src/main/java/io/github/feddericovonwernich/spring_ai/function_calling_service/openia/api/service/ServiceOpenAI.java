@@ -11,13 +11,11 @@ import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.a
 import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.api.runs.*;
 import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.api.threads.Thread;
 import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.api.threads.ThreadRequest;
-import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.assistants.*;
-import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.common.*;
 import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.api.messages.Message;
 import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.api.messages.MessageFile;
 import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.api.messages.MessageRequest;
 import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.api.messages.ModifyMessageRequest;
-import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.runs.*;
+
 import io.reactivex.rxjava3.core.Single;
 import okhttp3.ConnectionPool;
 import okhttp3.OkHttpClient;

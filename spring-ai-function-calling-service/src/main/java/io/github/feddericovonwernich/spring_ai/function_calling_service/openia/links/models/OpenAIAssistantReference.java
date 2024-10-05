@@ -7,26 +7,22 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 @Entity
-@Table(name = "orchestrator_thread")
+@Table(name = "open_ai_assistant")
 @Data
 @Builder
 @AllArgsConstructor
 @NoArgsConstructor
-public class OrchestratorThread {
+public class OpenAIAssistantReference {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "id")
     private Long id;
 
-    @ManyToOne
-    @JoinColumn(name = "semantic_thread_id", referencedColumnName = "id")
-    private SemanticThread semanticThread;
+    @Column(unique = true, nullable = false)
+    private String name;
 
     @Column(nullable = false)
-    private String openAiThreadId;
-
-    @Column(nullable = false)
-    private OrchestratorThreadStatus status;
+    private String openAiAssistantId;
 
 }

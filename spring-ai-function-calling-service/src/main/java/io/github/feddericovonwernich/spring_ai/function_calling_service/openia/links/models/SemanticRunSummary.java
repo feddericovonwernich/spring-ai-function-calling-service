@@ -2,13 +2,17 @@ package io.github.feddericovonwernich.spring_ai.function_calling_service.openia.
 
 import io.github.feddericovonwernich.spring_ai.function_calling_service.spi.chain.AssistantChainRun;
 import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 @Entity
 @Table(name = "semantic_run_summary")
 @Data
 @Builder
+@AllArgsConstructor
+@NoArgsConstructor
 public class SemanticRunSummary {
 
     @Id

@@ -9,6 +9,6 @@ public interface AssistantChain {
 
     void addLink(AssistantChainLink assistantChainLink);
 
-    AssistantResponseInteraction runThroughChain(String prompt, Long lastRunId) throws AssistantFailedException;
+    AssistantResponseInteraction runThroughChain(AssistantChainRun assistantChainRun, Long lastRunId) throws AssistantFailedException;
 
 }

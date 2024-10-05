@@ -9,6 +9,7 @@ import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.l
 import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.links.OrchestratorLink;
 import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.links.SemanticContextCheckLink;
 import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.links.SummarizatorLink;
+import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.links.models.OpenAIAssistantReferenceRepository;
 import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.links.models.OrchestratorThreadRepository;
 import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.links.models.SemanticRunSummaryRepository;
 import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.links.models.SemanticThreadRepository;
@@ -21,7 +22,6 @@ import io.github.feddericovonwernich.spring_ai.function_calling_service.spi.func
 import io.github.feddericovonwernich.spring_ai.function_calling_service.spi.function_definitions.FunctionDefinitionsServiceImpl;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.AutoConfigurationPackage;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.ApplicationContext;
@@ -49,10 +49,10 @@ public class OpenIAServiceAutoConfiguration {
     private String openIaApiKey;
 
     @Autowired
-    private AssistantChainRunRepository assistantChainRunRepository;
+    private SemanticThreadRepository semanticThreadRepository;
 
     @Autowired
-    private SemanticThreadRepository semanticThreadRepository;
+    private AssistantChainRunRepository assistantChainRunRepository;
 
     @Autowired
     private SemanticRunSummaryRepository semanticRunSummaryRepository;
@@ -70,14 +70,16 @@ public class OpenIAServiceAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    public AssistantService<Assistant> assistantService() {
-        return new StandardOpenIAAssistantService(applicationContext, serviceOpenAI());
+    public AssistantService<Assistant> assistantService(ApplicationContext applicationContext,
+                                                        ServiceOpenAI serviceOpenAI,
+                                                        OpenAIAssistantReferenceRepository openAIAssistantReferenceRepository) {
+        return new StandardOpenIAAssistantService(applicationContext, serviceOpenAI, openAIAssistantReferenceRepository);
     }
 
     @Bean
     @ConditionalOnMissingBean
     public AssistantServiceRequestQueue assistantServiceRequestQueue() {
-        return new InMemoryAssistantServiceRequestQueue();
+        return new InMemoryAssistantServiceRequestQueue(assistantChainRunRepository);
     }
 
     @Bean
@@ -88,49 +90,54 @@ public class OpenIAServiceAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    public FunctionDefinitionsService functionDefinitionsService() {
+    public FunctionDefinitionsService functionDefinitionsService(ApplicationContext applicationContext) {
         return new FunctionDefinitionsServiceImpl(applicationContext);
     }
 
     @Bean
-    public SemanticContextCheckLink semanticContextCheckLink() {
+    public SemanticContextCheckLink semanticContextCheckLink(AssistantService<Assistant> assistantService) {
         return new SemanticContextCheckLink(assistantChainRunRepository, semanticThreadRepository,
-                semanticRunSummaryRepository, assistantService());
+                semanticRunSummaryRepository, assistantService);
+    }
+
+    // TODO If I try to wire FunctionDefinitionsService bean here through the method arguments, it fails to start up, says something about a circular reference, why?
+    @Bean
+    public OrchestratorLink orchestratorLink(AssistantService<Assistant> assistantService, ServiceOpenAI serviceOpenAI) {
+        return new OrchestratorLink(assistantService, functionDefinitionsService(applicationContext), orchestratorThreadRepository, serviceOpenAI);
     }
 
     @Bean
-    public OrchestratorLink orchestratorLink() {
-        return new OrchestratorLink(assistantService(), functionDefinitionsService(),
-                orchestratorThreadRepository, serviceOpenAI());
+    public ExecutorLink executorLink(AssistantService<Assistant> assistantService, FunctionDefinitionsService functionDefinitionsService) {
+        return new ExecutorLink(assistantService, functionDefinitionsService);
     }
 
     @Bean
-    public ExecutorLink executorLink() {
-        return new ExecutorLink(assistantService(), functionDefinitionsService(), serviceOpenAI());
-    }
-
-    @Bean
-    public SummarizatorLink summarizatorLink() {
-        return new SummarizatorLink(assistantService(), semanticRunSummaryRepository);
+    public SummarizatorLink summarizatorLink(AssistantService<Assistant> assistantService) {
+        return new SummarizatorLink(assistantService, semanticRunSummaryRepository);
     }
 
     @Bean
     @ConditionalOnMissingBean
-    public AssistantChain assistantChain() {
+    public AssistantChain assistantChain(SemanticContextCheckLink semanticContextCheckLink,
+                                         OrchestratorLink orchestratorLink,
+                                         ExecutorLink executorLink,
+                                         SummarizatorLink summarizatorLink) {
         AssistantChain assistantChain = new AssistantChainImpl(assistantChainRunRepository);
-        assistantChain.addLink(semanticContextCheckLink());
-        assistantChain.addLink(orchestratorLink());
-        assistantChain.addLink(executorLink());
-        assistantChain.addLink(summarizatorLink());
+        assistantChain.addLink(semanticContextCheckLink);
+        assistantChain.addLink(orchestratorLink);
+        assistantChain.addLink(executorLink);
+        assistantChain.addLink(summarizatorLink);
         return assistantChain;
     }
 
     @Bean
     @ConditionalOnMissingBean
-    public AssistantServiceRequestConsumer assistantServiceRequestConsumer() {
+    public AssistantServiceRequestConsumer assistantServiceRequestConsumer(AssistantServiceRequestQueue assistantServiceRequestQueue,
+                                                                           AssistantServiceResponseQueue assistantServiceResponseQueue,
+                                                                           AssistantChain assistantChain) {
         // TODO Max threads should be configurable.
-        return new AssistantServiceRequestConsumer(assistantServiceRequestQueue(),
-                assistantServiceResponseQueue(), assistantChain(), 1);
+        return new AssistantServiceRequestConsumer(assistantServiceRequestQueue,
+                assistantServiceResponseQueue, assistantChain, 1);
     }
 
 }

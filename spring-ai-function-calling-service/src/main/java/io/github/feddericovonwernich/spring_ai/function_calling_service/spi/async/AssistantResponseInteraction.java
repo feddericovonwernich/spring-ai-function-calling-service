@@ -3,6 +3,7 @@ package io.github.feddericovonwernich.spring_ai.function_calling_service.spi.asy
 import lombok.*;
 
 @Getter
+@ToString
 public class AssistantResponseInteraction extends AssistantInteraction {
 
     private final String assistantResponse;

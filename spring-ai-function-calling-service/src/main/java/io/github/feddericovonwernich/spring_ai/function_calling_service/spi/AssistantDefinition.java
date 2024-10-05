@@ -3,7 +3,7 @@ package io.github.feddericovonwernich.spring_ai.function_calling_service.spi;
 import lombok.*;
 
 @Data
-@Builder
+//@Builder
 @ToString
 @NoArgsConstructor
 @AllArgsConstructor

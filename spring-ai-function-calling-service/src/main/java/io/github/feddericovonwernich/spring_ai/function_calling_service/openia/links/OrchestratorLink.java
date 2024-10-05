@@ -80,24 +80,9 @@ public class OrchestratorLink implements AssistantChainLink<Assistant> {
         // TODO Should be getting the SemanticThread from some context, it should not live in AssistantChainRun
         SemanticThread semanticThread = assistantChainRun.getSemanticThread();
 
-        // TODO Can we have more than one OrchestratorThread per SemanticThread? If so,
-        //  then this probably needs to change.
-        Optional<OrchestratorThread> orchestratorThreadOptional = orchestratorThreadRepository.findOne(new Example<>() {
-            @Override
-            @NonNull
-            public OrchestratorThread getProbe() {
-                return OrchestratorThread.builder()
-                        .semanticThread(semanticThread)
-                        .build();
-            }
-
-            @Override
-            @NonNull
-            public ExampleMatcher getMatcher() {
-                return ExampleMatcher.matching()
-                        .withIgnoreNullValues();
-            }
-        });
+        // We should not have more than one orchestrator thread open. If it's done, we should not be using it anymore.
+        Optional<OrchestratorThread> orchestratorThreadOptional
+                = orchestratorThreadRepository.findBySemanticThreadAndStatusNot(semanticThread, OrchestratorThreadStatus.DONE);
 
         Thread thread;
         OrchestratorThread orchestratorThread;
@@ -105,34 +90,14 @@ public class OrchestratorLink implements AssistantChainLink<Assistant> {
         if (orchestratorThreadOptional.isPresent()) {
             // We have the orchestrator thread, there's a thread to use.
             orchestratorThread = orchestratorThreadOptional.get();
+            Thread existingThread
+                    = OpenAiServiceUtils.getExistingThread(orchestratorThread.getOpenAiThreadId(), aiService);
 
-            if (orchestratorThread.getStatus().equals(OrchestratorThreadStatus.DONE)) {
-                //  A plan was created already, why are using this orchestrator thread again?
-                //   We should be using a new one.
-                thread = OpenAiServiceUtils.createNewThread(aiService);
-
-                orchestratorThread = OrchestratorThread.builder()
-                        .openAiThreadId(thread.getId())
-                        .status(OrchestratorThreadStatus.CREATED)
-                        .semanticThread(semanticThread)
-                        .build();
-
-                // Save it to database.
-                orchestratorThreadRepository.save(orchestratorThread);
-            } else {
-
-                Thread existingThread
-                        = OpenAiServiceUtils.getExistingThread(orchestratorThread.getOpenAiThreadId(), aiService);
-
-                // TODO What should happen if there's no such thread? This is definitely a bug.
-                //  For now, we create a new thread, but should log something or handle this in some way.
-                thread = Objects.requireNonNullElseGet(existingThread,
-                        () -> OpenAiServiceUtils.createNewThread(aiService));
-            }
+            // TODO What should happen if there's no such thread? This is definitely a bug.
+            //  For now, we create a new thread, but should log something or handle this in some way.
+            thread = Objects.requireNonNullElseGet(existingThread,
+                    () -> OpenAiServiceUtils.createNewThread(aiService));
         } else {
-
-            // TODO Looks duplicated huh?
-
             // We have to create the whole thing thread.
             thread = OpenAiServiceUtils.createNewThread(aiService);
 
@@ -172,7 +137,7 @@ public class OrchestratorLink implements AssistantChainLink<Assistant> {
             }
 
             // Add the response to the list of messages.
-            assistantChainRun.getMessages().add(response);
+            assistantChainRun.addMessage(response);
 
             // Return response to the system.
             return response;

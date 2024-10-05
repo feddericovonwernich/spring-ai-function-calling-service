@@ -14,6 +14,8 @@ import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.a
 import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.api.messages.MessageRequest;
 import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.api.threads.Thread;
 import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.api.service.ServiceOpenAI;
+import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.links.models.OpenAIAssistantReference;
+import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.links.models.OpenAIAssistantReferenceRepository;
 import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.utils.OpenAiServiceUtils;
 import io.github.feddericovonwernich.spring_ai.function_calling_service.spi.*;
 import com.google.gson.Gson;
@@ -21,9 +23,11 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
 import jakarta.annotation.Nonnull;
+import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.aop.SpringProxy;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationContext;
 
 import java.lang.reflect.AnnotatedType;
@@ -46,6 +50,7 @@ public class StandardOpenIAAssistantService implements AssistantService<Assistan
 
     private final ApplicationContext appContext;
     private final ServiceOpenAI aiService;
+    private final OpenAIAssistantReferenceRepository openAIAssistantReferenceRepository;
 
     private final ThreadLocal<Boolean> assistantFailed = new ThreadLocal<>();
     private final ThreadLocal<Boolean> rateLimitHit = new ThreadLocal<>();
@@ -54,15 +59,32 @@ public class StandardOpenIAAssistantService implements AssistantService<Assistan
     private final Gson gson;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
+    @Value("${assistant.resetOnStart:false}")
+    private boolean resetOnStart;
 
-    public StandardOpenIAAssistantService(ApplicationContext appContext, ServiceOpenAI aiService) {
-        this(appContext, aiService, new Gson());
+
+    public StandardOpenIAAssistantService(ApplicationContext appContext, ServiceOpenAI aiService, OpenAIAssistantReferenceRepository openAIAssistantReferenceRepository) {
+        this(appContext, aiService, openAIAssistantReferenceRepository, new Gson());
     }
 
-    public StandardOpenIAAssistantService(ApplicationContext appContext, ServiceOpenAI aiService, Gson gson) {
+    public StandardOpenIAAssistantService(ApplicationContext appContext, ServiceOpenAI aiService, OpenAIAssistantReferenceRepository openAIAssistantReferenceRepository, Gson gson) {
         this.appContext = appContext;
         this.aiService = aiService;
+        this.openAIAssistantReferenceRepository = openAIAssistantReferenceRepository;
         this.gson = gson;
+    }
+
+    @PostConstruct
+    private void init() {
+        if (resetOnStart) {
+            log.debug("Reset on start is true, cleaning assistants.");
+            List<OpenAIAssistantReference> openAIAssistantReferenceList = openAIAssistantReferenceRepository.findAll();
+            for (OpenAIAssistantReference openAIAssistantReference : openAIAssistantReferenceList) {
+                log.debug("Deleting assistant: {}", openAIAssistantReference);
+                aiService.deleteAssistant(openAIAssistantReference.getOpenAiAssistantId());
+                openAIAssistantReferenceRepository.delete(openAIAssistantReference);
+            }
+        }
     }
 
     @Override
@@ -72,10 +94,25 @@ public class StandardOpenIAAssistantService implements AssistantService<Assistan
 
     @Override
     public Assistant getOrCreateAssistant(AssistantDefinition definition) {
-        Assistant assistant = fetchAssistant(definition.getName());
-        if (assistant == null) {
+        Assistant assistant;
+        Optional<OpenAIAssistantReference> openAIAssistantReferenceOptional
+                = openAIAssistantReferenceRepository.findByName(definition.getName());
+        if (openAIAssistantReferenceOptional.isEmpty()) {
             assistant = createAssistant(definition);
+            OpenAIAssistantReference openAIAssistantReference = OpenAIAssistantReference.builder()
+                    .name(definition.getName())
+                    .openAiAssistantId(assistant.getId())
+                    .build();
+            openAIAssistantReferenceRepository.save(openAIAssistantReference);
+            log.debug("Saved assistant reference: {}", openAIAssistantReference);
+        } else {
+            assistant = fetchAssistant(openAIAssistantReferenceOptional.get().getOpenAiAssistantId());
+            if (assistant == null) {
+                assistant = createAssistant(definition);
+            }
+
         }
+
         return assistant;
     }
 
@@ -105,7 +142,7 @@ public class StandardOpenIAAssistantService implements AssistantService<Assistan
                     assistantRequestBuilder.responseFormat(new ResponseFormat(JSON_SCHEMA, responseSchema));
                 }
                 // If there's tools, we add them.
-                if (!openAIAssistantDefinition.getToolList().isEmpty()) {
+                if (openAIAssistantDefinition.getToolList() != null && !openAIAssistantDefinition.getToolList().isEmpty()) {
                     assistantRequestBuilder.tools(openAIAssistantDefinition.getToolList());
                 }
             }
@@ -260,7 +297,7 @@ public class StandardOpenIAAssistantService implements AssistantService<Assistan
 
         if (lowerCaseFunctionName.contains("_systemagent")) {
             for (String functionId : systemFunctions.keySet()) {
-                if (functionId.equals(lowerCaseFunctionName)) {
+                if (functionId.equalsIgnoreCase(lowerCaseFunctionName)) {
                     try {
                         String response = systemFunctions.get(functionId).apply(function);
                         log.debug("Agent: " + functionId + " | systemAgentResponse: " + response);
@@ -286,7 +323,7 @@ public class StandardOpenIAAssistantService implements AssistantService<Assistan
             invokeMatchingFunction(function, bean, beanClass, functionResponse);
         });
 
-        log.debug("Function response: {}", functionResponse.get());
+        log.debug("Function response: {}", functionResponse.get()); // TODO Response should not be empty here, it makes the assistant hallucinate.
 
         return functionResponse.get();
     }
@@ -385,18 +422,14 @@ public class StandardOpenIAAssistantService implements AssistantService<Assistan
         return arguments;
     }
 
-    private Assistant fetchAssistant(String assistantName) {
-        // TODO OWL_TODO Probably need to cache this list.
-        OpenAiResponse<Assistant> response = aiService.listAssistants(new ListSearchParameters());
-        List<Assistant> assistantList = response.getData();
-        for (Assistant assistant : assistantList) {
-            if (assistant.getName().equals(assistantName)) {
-                log.info("Assistant found for name: " + assistantName);
-                return assistant;
-            }
+    private Assistant fetchAssistant(String assistantId) {
+        // TODO I'm not sure what errors this will throw, looks like it could be handled better.
+        try {
+            return aiService.retrieveAssistant(assistantId);
+        } catch (Exception e) {
+            log.error("Error while fetching assistant:", e);
+            return null;
         }
-        log.info("Assistant not found.");
-        return null;
     }
 
     private String determineFunctionName(FunctionDefinition functionDefinition, Method method) {
