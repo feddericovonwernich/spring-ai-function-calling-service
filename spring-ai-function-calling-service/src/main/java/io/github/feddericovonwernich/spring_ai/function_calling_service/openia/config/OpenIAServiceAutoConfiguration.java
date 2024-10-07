@@ -100,11 +100,7 @@ public class OpenIAServiceAutoConfiguration {
                 semanticRunSummaryRepository, assistantService);
     }
 
-    // TODO If I try to wire FunctionDefinitionsService bean here through the method arguments, it fails to start up, says something about a circular reference, why?
-    @Bean
-    public OrchestratorLink orchestratorLink(AssistantService<Assistant> assistantService, ServiceOpenAI serviceOpenAI) {
-        return new OrchestratorLink(assistantService, functionDefinitionsService(applicationContext), orchestratorThreadRepository, serviceOpenAI);
-    }
+
 
     @Bean
     public ExecutorLink executorLink(AssistantService<Assistant> assistantService, FunctionDefinitionsService functionDefinitionsService) {
@@ -114,6 +110,12 @@ public class OpenIAServiceAutoConfiguration {
     @Bean
     public SummarizatorLink summarizatorLink(AssistantService<Assistant> assistantService) {
         return new SummarizatorLink(assistantService, semanticRunSummaryRepository);
+    }
+
+    // TODO If I try to wire FunctionDefinitionsService bean here through the method arguments, it fails to start up, says something about a circular reference, why?
+    @Bean
+    public OrchestratorLink orchestratorLink(AssistantService<Assistant> assistantService, ServiceOpenAI serviceOpenAI, FunctionDefinitionsService functionDefinitionsService) {
+        return new OrchestratorLink(assistantService, functionDefinitionsService, orchestratorThreadRepository, serviceOpenAI);
     }
 
     @Bean

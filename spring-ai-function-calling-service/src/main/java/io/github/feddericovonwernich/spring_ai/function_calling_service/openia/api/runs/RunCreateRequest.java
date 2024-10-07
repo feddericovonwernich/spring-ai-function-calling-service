@@ -14,9 +14,9 @@ import java.util.Map;
 @AllArgsConstructor
 @Data
 public class RunCreateRequest {
+
     String assistantId;
 
-    // Optional
     String model;
     
     String instructions;
@@ -24,5 +24,7 @@ public class RunCreateRequest {
     List<Tool> tools;
     
     Map<String, String> metadata;
+
+    String toolChoice;
 
 }

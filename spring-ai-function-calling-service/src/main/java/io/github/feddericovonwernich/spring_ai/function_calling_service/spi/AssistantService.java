@@ -29,4 +29,5 @@ public interface AssistantService<AssistantType> {
     String processRequest(String prompt, AssistantType assistantType, Map<String, ?> context) throws AssistantFailedException;
 
 
+    String processRequestForceToolCall(String prompt, Assistant assistant, Map<String, ?> context) throws AssistantFailedException;
 }

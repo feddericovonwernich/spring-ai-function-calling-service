@@ -29,7 +29,7 @@ import org.springframework.data.domain.ExampleMatcher;
 import java.util.*;
 import java.util.function.Function;
 
-@AssistantToolProvider
+//@AssistantToolProvider
 @Slf4j
 public class OrchestratorLink implements AssistantChainLink<Assistant> {
 
@@ -37,7 +37,7 @@ public class OrchestratorLink implements AssistantChainLink<Assistant> {
 
     private static String ORCHESTRATOR_ASSISTANT = "OrchestratorAssistant";
     private static String ORCHESTRATOR_MODEL = "gpt-4o-mini-2024-07-18";
-    private static String ORCHESTRATOR_PROMPT = "Your task is to identify which action on the system the user wants to perform, identify which information the user has given, and formulate a plan for another assistant to follow and execute to fulfill the users request. BE VERY CONCISE.";
+    private static String ORCHESTRATOR_PROMPT = "Your task is to identify which action on the system the user wants to perform, identify which information the user has given, and formulate a plan for another assistant to follow and execute to fulfill the users request. ALWAYS CHECK IF INFORMATION IS ENOUGH WITH PROVIDED TOOL BEFORE DECIDING ON A PLAN. BE VERY CONCISE.";
     private static String ORCHESTRATOR_DESCRIPTION = "Assistant that understands user request and can formulate a plan to fulfill it.";
     private static String ORCHESTRATOR_SCHEMA = """
             {
@@ -67,7 +67,8 @@ public class OrchestratorLink implements AssistantChainLink<Assistant> {
 
     public OrchestratorLink(AssistantService<Assistant> assistantService,
                             FunctionDefinitionsService functionDefinitionsService,
-                            OrchestratorThreadRepository orchestratorThreadRepository, ServiceOpenAI aiService) {
+                            OrchestratorThreadRepository orchestratorThreadRepository,
+                            ServiceOpenAI aiService) {
         this.assistantService = assistantService;
         this.functionDefinitionsService = functionDefinitionsService;
         this.orchestratorThreadRepository = orchestratorThreadRepository;
@@ -90,13 +91,9 @@ public class OrchestratorLink implements AssistantChainLink<Assistant> {
         if (orchestratorThreadOptional.isPresent()) {
             // We have the orchestrator thread, there's a thread to use.
             orchestratorThread = orchestratorThreadOptional.get();
-            Thread existingThread
-                    = OpenAiServiceUtils.getExistingThread(orchestratorThread.getOpenAiThreadId(), aiService);
+            thread = OpenAiServiceUtils.getExistingThread(orchestratorThread.getOpenAiThreadId(), aiService);
+            log.debug("Using orchestrator thread: {}", orchestratorThread);
 
-            // TODO What should happen if there's no such thread? This is definitely a bug.
-            //  For now, we create a new thread, but should log something or handle this in some way.
-            thread = Objects.requireNonNullElseGet(existingThread,
-                    () -> OpenAiServiceUtils.createNewThread(aiService));
         } else {
             // We have to create the whole thing thread.
             thread = OpenAiServiceUtils.createNewThread(aiService);
@@ -109,12 +106,13 @@ public class OrchestratorLink implements AssistantChainLink<Assistant> {
 
             // Save it to database.
             orchestratorThreadRepository.save(orchestratorThread);
+            log.debug("Created orchestrator thread: {}", orchestratorThread);
         }
 
         Map<String, ?> context = Collections.singletonMap("thread", thread);
         String prompt = assistantChainRun.getMessages().getLast();
 
-        String responseJsonString = assistantService.processRequest(prompt, getAssistant(), context);
+        String responseJsonString = assistantService.processRequestForceToolCall(prompt, getAssistant(), context);
 
         try {
             // TODO Should be deserialized to a known entity made for this use case.
@@ -199,7 +197,7 @@ public class OrchestratorLink implements AssistantChainLink<Assistant> {
                 "properties": {
                     "user_prompt": {
                         "type": "string",
-                        "description": "Information given by the user. Be concise."
+                        "description": "Information given by the user so far. Summarize the information the user has given to the system so far. Be concise."
                     },
                     "operations": {
                         "type": "array",
@@ -315,7 +313,9 @@ public class OrchestratorLink implements AssistantChainLink<Assistant> {
                             "description": {
                                 "type": "string"
                             }
-                        }
+                        },
+                        "required": ["key", "description"],
+                        "additionalProperties": false
                     },
                     "description": "Keys and descriptions of missing information if result_type = MISSING. Empty list if result_type = OK."
                 },
@@ -358,29 +358,36 @@ public class OrchestratorLink implements AssistantChainLink<Assistant> {
         // For each operation, I need to get the parameters.
         for (String operation : operations) {
             String parameterDefinition = functionDefinitionsService.getParametersDefinition(operation);
+            if (parameterDefinition != null) {
 
-            String finalPrompt = buildDataIdentifierEvaluationPrompt(prompt, parameterDefinition, operation);
-            String assistantResponse = assistantService.processRequest(finalPrompt, getDataIdentifierAssistant());
+                // TODO This prompt has to have information about the user request.
+                //  We somehow need to collect what the user has given so far in the current orchestratorThread.
 
-            // Parse the assistant response and populate the returnMap.
-            ObjectMapper mapper = new ObjectMapper();
-            try {
-                JsonNode rootNode = mapper.readTree(assistantResponse);
-                String resultType = rootNode.get("result_type").asText();
+                String finalPrompt = buildDataIdentifierEvaluationPrompt(prompt, parameterDefinition, operation);
+                String assistantResponse = assistantService.processRequest(finalPrompt, getDataIdentifierAssistant());
 
-                if ("MISSING".equals(resultType)) {
-                    JsonNode responseArray = rootNode.get("response");
-                    if (responseArray != null && responseArray.isArray()) {
-                        for (JsonNode itemNode : responseArray) {
-                            String key = itemNode.get("key").asText();
-                            String description = itemNode.get("description").asText();
-                            returnMap.put(key, description);
+                // Parse the assistant response and populate the returnMap.
+                ObjectMapper mapper = new ObjectMapper();
+                try {
+                    JsonNode rootNode = mapper.readTree(assistantResponse);
+                    String resultType = rootNode.get("result_type").asText();
+
+                    if ("MISSING".equals(resultType)) {
+                        JsonNode responseArray = rootNode.get("response");
+                        if (responseArray != null && responseArray.isArray()) {
+                            for (JsonNode itemNode : responseArray) {
+                                String key = itemNode.get("key").asText();
+                                String description = itemNode.get("description").asText();
+                                returnMap.put(key, description);
+                            }
                         }
                     }
+                } catch (Exception e) {
+                    log.error("Failed parsing response from evaluateInformation assistant.", e);
+                    throw new RuntimeException(e);
                 }
-            } catch (Exception e) {
-                log.error("Failed parsing response from evaluateInformation assistant.", e);
-                throw new RuntimeException(e);
+            } else {
+                log.warn("Parameter definition not found for: {}", operation);
             }
         }
 

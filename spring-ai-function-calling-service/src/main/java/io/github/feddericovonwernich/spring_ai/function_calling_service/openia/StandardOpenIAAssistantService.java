@@ -6,7 +6,6 @@ import io.github.feddericovonwernich.spring_ai.function_calling_service.annotati
 import io.github.feddericovonwernich.spring_ai.function_calling_service.annotations.FunctionDefinition;
 import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.api.assistants.*;
 import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.api.runs.*;
-import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.api.common.ListSearchParameters;
 import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.api.common.OpenAiResponse;
 import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.api.messages.Message;
 import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.api.messages.MessageContent;
@@ -81,7 +80,11 @@ public class StandardOpenIAAssistantService implements AssistantService<Assistan
             List<OpenAIAssistantReference> openAIAssistantReferenceList = openAIAssistantReferenceRepository.findAll();
             for (OpenAIAssistantReference openAIAssistantReference : openAIAssistantReferenceList) {
                 log.debug("Deleting assistant: {}", openAIAssistantReference);
-                aiService.deleteAssistant(openAIAssistantReference.getOpenAiAssistantId());
+                try {
+                    aiService.deleteAssistant(openAIAssistantReference.getOpenAiAssistantId());
+                } catch (Exception e) {
+                    log.error("Error while deleting assistant: {}", openAIAssistantReference, e);
+                }
                 openAIAssistantReferenceRepository.delete(openAIAssistantReference);
             }
         }
@@ -164,6 +167,7 @@ public class StandardOpenIAAssistantService implements AssistantService<Assistan
 
     @Override
     public String processRequest(String prompt, Assistant assistant, Map<String, ?> context) throws AssistantFailedException {
+        log.debug("Assistant: {}, prompt: {}", assistant.getId(), prompt);
         Thread thread = null;
         if (context != null) {
             thread = (Thread) context.get("thread");
@@ -172,17 +176,32 @@ public class StandardOpenIAAssistantService implements AssistantService<Assistan
             thread = OpenAiServiceUtils.createNewThread(aiService);
         }
 
-        String assistantResponse = processRequestOnThread(prompt, thread, assistant);
+        String assistantResponse = processRequestOnThread(prompt, thread, assistant, false);
         log.debug("Assistant {} Response: {}", assistant.getName(), assistantResponse);
         return assistantResponse;
     }
 
-    private String processRequestOnThread(String userInput, Thread thread, Assistant assistant)  throws AssistantFailedException {
+    @Override
+    public String processRequestForceToolCall(String prompt, Assistant assistant, Map<String, ?> context) throws AssistantFailedException {
+        Thread thread = null;
+        if (context != null) {
+            thread = (Thread) context.get("thread");
+        }
+        if (thread == null) {
+            thread = OpenAiServiceUtils.createNewThread(aiService);
+        }
+
+        String assistantResponse = processRequestOnThread(prompt, thread, assistant, true);
+        log.debug("Assistant {} Response: {}", assistant.getName(), assistantResponse);
+        return assistantResponse;
+    }
+
+    private String processRequestOnThread(String userInput, Thread thread, Assistant assistant, boolean requireToolCall)  throws AssistantFailedException {
         // Append user request to thread.
         createMessageOnThread(userInput, thread);
 
         // Assign the thread to the assistant.
-        Run run = createRunForThread(thread, assistant);
+        Run run = createRunForThread(thread, assistant, requireToolCall);
         Run retrievedRun = aiService.retrieveRun(thread.getId(), run.getId());
         retrievedRun = waitForRun(thread, run, retrievedRun);
         processActions(retrievedRun, thread, run);
@@ -265,11 +284,13 @@ public class StandardOpenIAAssistantService implements AssistantService<Assistan
         return toolOutputRequestItems;
     }
 
-    private Run createRunForThread(Thread thread, Assistant assistant) {
-        RunCreateRequest runCreateRequest = RunCreateRequest.builder()
-                .assistantId(assistant.getId())
-                .build();
-        return aiService.createRun(thread.getId(), runCreateRequest);
+    private Run createRunForThread(Thread thread, Assistant assistant, boolean requireToolCall) {
+        RunCreateRequest.RunCreateRequestBuilder runCreateRequestBuilder = RunCreateRequest.builder()
+                .assistantId(assistant.getId());
+        if (requireToolCall) {
+            runCreateRequestBuilder.toolChoice("required");
+        }
+        return aiService.createRun(thread.getId(), runCreateRequestBuilder.build());
     }
 
     private void createMessageOnThread(String userInput, Thread thread) {
@@ -284,13 +305,18 @@ public class StandardOpenIAAssistantService implements AssistantService<Assistan
         while (!(retrievedRun.getStatus().equals("completed"))
                 && !(retrievedRun.getStatus().equals("failed"))
                 && !(retrievedRun.getStatus().equals("requires_action"))) {
-            log.debug("Thread ID: {}, Run status: {}", thread.getId(), retrievedRun.getStatus());
+            log.trace("Thread ID: {}, Run status: {}", thread.getId(), retrievedRun.getStatus());
             retrievedRun = aiService.retrieveRun(thread.getId(), run.getId());
         }
         return retrievedRun;
     }
 
     private String executeFunctionCall(ToolCallFunction function) throws AssistantFailedException {
+
+        // Path for annotated classes function calls.
+
+        log.debug("Calling function: {}", function.getName());
+        log.debug("Function arguments: {}", function.getArguments());
 
         // Path if we call a ServiceAgent, I need to do something like this.
         String lowerCaseFunctionName = function.getName().toLowerCase();
@@ -309,11 +335,6 @@ public class StandardOpenIAAssistantService implements AssistantService<Assistan
                 }
             }
         }
-
-        // Path for annotated classes function calls.
-
-        log.debug("Calling function: {}", function.getName());
-        log.debug("Function arguments: {}", function.getArguments());
 
         Map<String, Object> beans = appContext.getBeansWithAnnotation(AssistantToolProvider.class);
         AtomicReference<String> functionResponse = new AtomicReference<>("");

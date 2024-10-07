@@ -33,7 +33,7 @@ public class AssistantChainImpl implements AssistantChain {
         String response = null;
         try {
             for (AssistantChainLink chainLink : chainLinks) {
-                log.debug("Processing for link {}", chainLink.getClass().getSimpleName());
+                log.trace("Processing for link {}", chainLink.getClass().getSimpleName());
                 response = chainLink.process(assistantChainRun, lastRunId);
                 // Go through the chain and break if a link ask for user action.
                 if (assistantChainRun.getStatus().equals(RunStatus.USER_ACTION)) break;

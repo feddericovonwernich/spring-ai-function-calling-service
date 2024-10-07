@@ -96,26 +96,29 @@ public class SemanticContextCheckLink implements AssistantChainLink<Assistant> {
             //  It should be stored somewhere else in database.
             semanticThread = lastChainRun.getSemanticThread();
 
-                semanticRunSummaries = semanticRunSummaryRepository.findAll(new Example<>() {
-                    @Override
-                    @NonNull
-                    public SemanticRunSummary getProbe() {
-                        return SemanticRunSummary.builder()
-                                .semanticThread(semanticThread)
-                                .build();
-                    }
+            semanticRunSummaries = semanticRunSummaryRepository.findAll(new Example<>() {
+                @Override
+                @NonNull
+                public SemanticRunSummary getProbe() {
+                    return SemanticRunSummary.builder()
+                            .semanticThread(semanticThread)
+                            .build();
+                }
 
-                    @Override
-                    @NonNull
-                    public ExampleMatcher getMatcher() {
-                        return ExampleMatcher.matching()
-                                .withIgnoreNullValues();
-                    }
-                });
+                @Override
+                @NonNull
+                public ExampleMatcher getMatcher() {
+                    return ExampleMatcher.matching()
+                            .withIgnoreNullValues();
+                }
+            });
 
+            log.debug("Running with semanticThread: {}, lastRunId: {}, Summaries found: {}",
+                    semanticThread, lastRunId, semanticRunSummaries);
         } else {
             // If there's no last run ID, then there's no earlier context to fetch. We create a new one.
             semanticThread = semanticThreadRepository.save(SemanticThread.builder().build());
+            log.debug("Run without context, created semanticThread: {}", semanticThread);
         }
 
         String userRequest = assistantChainRun.getMessages().getLast();
@@ -125,6 +128,7 @@ public class SemanticContextCheckLink implements AssistantChainLink<Assistant> {
             List<String> context = getContextFromSummaries(userRequest, semanticRunSummaries);
 
             if (!context.isEmpty()) {
+                log.debug("Adding context to prompt: {}", context);
                 StringBuilder responseStringBuilder = new StringBuilder();
                 for (String contextString : context) {
                     responseStringBuilder.append("Conversation Context: ")
@@ -141,6 +145,7 @@ public class SemanticContextCheckLink implements AssistantChainLink<Assistant> {
         // TODO Technically, AssistantChainRun should not have knowledge about SemanticThread.
         //  Ideally, we should be setting this SemanticThread in some Chain Context.
         assistantChainRun.setSemanticThread(semanticThread);
+        //assistantChainRunRepository.save(assistantChainRun);
 
         return response;
     }

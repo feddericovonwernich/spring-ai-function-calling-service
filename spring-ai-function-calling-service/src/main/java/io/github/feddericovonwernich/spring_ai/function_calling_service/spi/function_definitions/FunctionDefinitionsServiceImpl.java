@@ -75,9 +75,13 @@ public class FunctionDefinitionsServiceImpl implements FunctionDefinitionsServic
         return functionDefinitions.keySet();
     }
 
+    // TODO OWL_TODO Im not sure why there are no function definitions registered, but should be looking into that.
+
     @Override
     public String getParametersDefinition(String operation) {
         FunctionDefinition functionDefinition = functionDefinitions.get(operation);
+
+        if (functionDefinition == null) return null;
 
         if (functionDefinition.parameters() != null && !functionDefinition.parameters().isEmpty()) {
             return functionDefinition.parameters();
