@@ -5,7 +5,7 @@ plugins {
 }
 
 group = 'io.github.feddericovonwernich'
-version = '0.0.6.45-SNAPSHOT'
+version = '0.0.6.53-SNAPSHOT'
 
 java {
 	toolchain {

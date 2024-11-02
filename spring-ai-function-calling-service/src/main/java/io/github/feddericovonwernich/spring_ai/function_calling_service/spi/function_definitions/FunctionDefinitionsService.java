@@ -9,5 +9,7 @@ public interface FunctionDefinitionsService {
 
     String getParametersDefinition(String operation);
 
+    String getParametersDefinition(String operation, Boolean onlyAnnotatedFieldsAsRequired);
+
     List<Class<?>> getToolProviders();
 }

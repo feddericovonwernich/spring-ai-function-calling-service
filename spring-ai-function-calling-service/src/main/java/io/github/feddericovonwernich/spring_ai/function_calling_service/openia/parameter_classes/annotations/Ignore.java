@@ -1,4 +1,4 @@
-package io.github.feddericovonwernich.spring_ai.function_calling_service.annotations;
+package io.github.feddericovonwernich.spring_ai.function_calling_service.openia.parameter_classes.annotations;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;

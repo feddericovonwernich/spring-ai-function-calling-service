@@ -1,7 +1,7 @@
-package io.github.feddericovonwernich.spring_ai.function_calling_service;
+package io.github.feddericovonwernich.spring_ai.function_calling_service.openia.parameter_classes;
 
 import com.google.gson.Gson;
-import io.github.feddericovonwernich.spring_ai.function_calling_service.annotations.*;
+import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.parameter_classes.annotations.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -18,7 +18,13 @@ public class ParameterClassUtils {
 
     public static String getParameterClassString(Class<?> clazz) {
         // This also validates that the JSON string is well formatted.
-        Object json = gson.fromJson(getParameterClassStringInternal(clazz, ParameterClassResolution.MAIN, null), Object.class);
+        Object json = gson.fromJson(getParameterClassStringInternal(clazz, ParameterClassResolution.MAIN, null, false), Object.class);
+        return gson.toJson(json);
+    }
+
+    public static String getParameterClassString(Class<?> clazz, Boolean onlyAnnotatedFieldsAsRequired) {
+        // This also validates that the JSON string is well formatted.
+        Object json = gson.fromJson(getParameterClassStringInternal(clazz, ParameterClassResolution.MAIN, null, onlyAnnotatedFieldsAsRequired), Object.class);
         return gson.toJson(json);
     }
 
@@ -30,7 +36,7 @@ public class ParameterClassUtils {
 
     static ThreadLocal<Map<String, String>> definitionsTL = new ThreadLocal<>();
 
-    private static String getParameterClassStringInternal(Class<?> clazz, ParameterClassResolution parameterClassResolution, Boolean required) {
+    private static String getParameterClassStringInternal(Class<?> clazz, ParameterClassResolution parameterClassResolution, Boolean required, Boolean onlyAnnotatedFieldsAsRequired) {
         if (clazz.getAnnotation(ParameterClass.class) == null) {
             throw new IllegalArgumentException("Class " + clazz.getName() + " is not annotated with @ParameterClass");
         }
@@ -52,18 +58,25 @@ public class ParameterClassUtils {
 
         // Build required fields JSON
         StringJoiner requiredFields = new StringJoiner(", ");
-        fieldTypes.keySet().forEach(key -> {
-            requiredFields.add("\"" + key + "\"");
-        });
 
-        String propertiesJson = getPropertiesJson(fieldTypes, fieldDescriptions, clazz, requiredFieldsList);
+        if (onlyAnnotatedFieldsAsRequired) {
+            requiredFieldsList.forEach(key -> {
+                requiredFields.add("\"" + key + "\"");
+            });
+        } else {
+            fieldTypes.keySet().forEach(key -> {
+                requiredFields.add("\"" + key + "\"");
+            });
+        }
+
+        String propertiesJson = getPropertiesJson(fieldTypes, fieldDescriptions, clazz, requiredFieldsList, onlyAnnotatedFieldsAsRequired);
 
         // TODO Do I really need these lines?
         for (Field field : clazz.getDeclaredFields()) {
             if (field.isAnnotationPresent(ParameterClass.class)) {
                 Class<?> fieldClass = field.getType();
                 Boolean isRequired = requiredFieldsList.contains(field.getName());
-                String fieldClassJson = getParameterClassStringInternal(fieldClass, ParameterClassResolution.INNER, isRequired);
+                String fieldClassJson = getParameterClassStringInternal(fieldClass, ParameterClassResolution.INNER, isRequired, onlyAnnotatedFieldsAsRequired);
                 definitionsTL.get().put(fieldClass.getSimpleName(), fieldClassJson);
             }
         }
@@ -72,9 +85,7 @@ public class ParameterClassUtils {
         String definitionsJsonString = String.join(", ", definitionsTL.get().values());
 
         return switch (parameterClassResolution) {
-
             case INNER -> {
-
                 String typeString;
                 String typeName;
                 if (required) {
@@ -149,7 +160,7 @@ public class ParameterClassUtils {
     }
 
     private static String getPropertiesJson(Map<String, String> fieldTypes, Map<String, String> fieldDescriptions,
-                                            Class<?> parentClass, List<String> requiredFields) {
+                                            Class<?> parentClass, List<String> requiredFields, Boolean onlyAnnotatedFieldsAsRequired) {
         StringBuilder propertiesBuilder = new StringBuilder();
         propertiesBuilder.append("{\n");
         StringJoiner propertiesJoiner = new StringJoiner(",\n");
@@ -169,7 +180,7 @@ public class ParameterClassUtils {
                 continue; // Skip this field if its definition is not found
             }
 
-            propertiesJoiner.add(getFieldJson(fieldType, description, fieldName, field, fieldClass, requiredFields));
+            propertiesJoiner.add(getFieldJson(fieldType, description, fieldName, field, fieldClass, requiredFields, onlyAnnotatedFieldsAsRequired));
         }
 
         propertiesBuilder.append(propertiesJoiner);
@@ -179,7 +190,7 @@ public class ParameterClassUtils {
     }
 
     private static String getFieldJson(String fieldType, String description, String fieldName, Field field,
-                                       Class<?> fieldClass, List<String> requiredFields) {
+                                       Class<?> fieldClass, List<String> requiredFields, Boolean onlyAnnotatedFieldsAsRequired) {
         String fieldFormat;
         if ("object".equals(fieldType)) {
             if (field.isAnnotationPresent(Reference.class)) {
@@ -240,7 +251,7 @@ public class ParameterClassUtils {
                     typeName = fieldClass.getSimpleName() + "NotRequired";
                 }
 
-                String definition = getParameterClassStringInternal(fieldClass, ParameterClassResolution.INNER, isRequired);
+                String definition = getParameterClassStringInternal(fieldClass, ParameterClassResolution.INNER, isRequired, onlyAnnotatedFieldsAsRequired);
 
                 definitionsTL.get().put(fieldName, definition);
 
@@ -306,7 +317,7 @@ public class ParameterClassUtils {
                 /*
                  * Required is true here, as for arrays, we want the regular definition. The array could always be empty.
                  */
-                String definition = getParameterClassStringInternal(arrayItemType, ParameterClassResolution.INNER, true);
+                String definition = getParameterClassStringInternal(arrayItemType, ParameterClassResolution.INNER, true, onlyAnnotatedFieldsAsRequired);
                 definitionsTL.get().put(arrayItemType.getSimpleName(), definition);
             } else {
                 throw new IllegalArgumentException("Array items of complex types not annotated with @ParameterClass are not supported.");

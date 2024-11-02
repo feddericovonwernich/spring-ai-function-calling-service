@@ -44,8 +44,7 @@ public class AssistantChainRun {
          * TODO Alright this is a little weird, even if AssistantChainRunImpl.runThroughChain is annotated with transactional,
          *  Spring context won't let me add elements to the list of messages directly, this is a workaround, but original behavior might be a bug
          */
-        List<String> currentList = new ArrayList<>();
-        messages.forEach(messageString -> currentList.add(message));
+        List<String> currentList = new ArrayList<>(messages);
         currentList.add(message);
         messages = currentList;
     }

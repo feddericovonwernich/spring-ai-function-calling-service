@@ -1,9 +1,9 @@
 package io.github.feddericovonwernich.spring_ai.function_calling_service.spi.function_definitions;
 
-import io.github.feddericovonwernich.spring_ai.function_calling_service.ParameterClassUtils;
+import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.parameter_classes.ParameterClassUtils;
 import io.github.feddericovonwernich.spring_ai.function_calling_service.annotations.AssistantToolProvider;
 import io.github.feddericovonwernich.spring_ai.function_calling_service.annotations.FunctionDefinition;
-import io.github.feddericovonwernich.spring_ai.function_calling_service.annotations.ParameterClass;
+import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.parameter_classes.annotations.ParameterClass;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.reflections.Reflections;
@@ -75,10 +75,13 @@ public class FunctionDefinitionsServiceImpl implements FunctionDefinitionsServic
         return functionDefinitions.keySet();
     }
 
-    // TODO OWL_TODO Im not sure why there are no function definitions registered, but should be looking into that.
-
     @Override
     public String getParametersDefinition(String operation) {
+        return getParametersDefinition(operation, false);
+    }
+
+    @Override
+    public String getParametersDefinition(String operation, Boolean onlyAnnotatedFieldsAsRequired) {
         FunctionDefinition functionDefinition = functionDefinitions.get(operation);
 
         if (functionDefinition == null) return null;
@@ -86,7 +89,7 @@ public class FunctionDefinitionsServiceImpl implements FunctionDefinitionsServic
         if (functionDefinition.parameters() != null && !functionDefinition.parameters().isEmpty()) {
             return functionDefinition.parameters();
         } else if (functionDefinition.parameterClass() != null) {
-            return ParameterClassUtils.getParameterClassString(functionDefinition.parameterClass());
+            return ParameterClassUtils.getParameterClassString(functionDefinition.parameterClass(), onlyAnnotatedFieldsAsRequired);
         } else {
             throw new IllegalArgumentException(
                     String.format("FunctionDefinition %s should have either parameters or parameterClass set.", functionDefinition)

@@ -5,7 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import io.github.feddericovonwernich.spring_ai.function_calling_service.ParameterClassUtils;
+import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.parameter_classes.ParameterClassUtils;
 import io.github.feddericovonwernich.spring_ai.function_calling_service.annotations.AssistantToolProvider;
 import io.github.feddericovonwernich.spring_ai.function_calling_service.annotations.FunctionDefinition;
 import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.OpenAIAssistantDefinition;
@@ -13,8 +13,6 @@ import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.S
 import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.SystemFunctionWrappedException;
 import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.api.assistants.*;
 import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.api.runs.ToolCallFunction;
-import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.api.service.ServiceOpenAI;
-import io.github.feddericovonwernich.spring_ai.function_calling_service.openia.links.models.OpenAIAssistantReference;
 import io.github.feddericovonwernich.spring_ai.function_calling_service.spi.AssistantDefinition;
 import io.github.feddericovonwernich.spring_ai.function_calling_service.spi.AssistantFailedException;
 import io.github.feddericovonwernich.spring_ai.function_calling_service.spi.AssistantService;
@@ -73,7 +71,11 @@ public class ExecutorLink implements AssistantChainLink<Assistant> {
     @Override
     public String process(AssistantChainRun assistantChainRun, Long lastRunId) throws AssistantFailedException {
         String prompt = assistantChainRun.getMessages().getLast();
-        return parseAssistantResponse(assistantService.processRequest(prompt, getAssistant()));
+        String executorResponse = parseAssistantResponse(assistantService.processRequest(prompt, getAssistant()));
+        // TODO I'm thinkin that maybe we could do this more generically. So the user doesn't have to remember to put messages in the list.
+        //  But what about SummarizatorLink that doesn't have to append anything? Or it does? It does.
+        assistantChainRun.addMessage(executorResponse);
+        return executorResponse;
     }
 
     private String parseAssistantResponse(String assistantJsonResponse) {

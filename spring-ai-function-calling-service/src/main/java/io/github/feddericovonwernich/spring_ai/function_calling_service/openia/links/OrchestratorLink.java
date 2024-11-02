@@ -109,39 +109,48 @@ public class OrchestratorLink implements AssistantChainLink<Assistant> {
             log.debug("Created orchestrator thread: {}", orchestratorThread);
         }
 
-        Map<String, ?> context = Collections.singletonMap("thread", thread);
-        String prompt = assistantChainRun.getMessages().getLast();
-
-        String responseJsonString = assistantService.processRequestForceToolCall(prompt, getAssistant(), context);
+        orchestratorThreadTL.set(orchestratorThread);
 
         try {
-            // TODO Should be deserialized to a known entity made for this use case.
+            Map<String, ?> context = Collections.singletonMap("thread", thread);
+            String prompt = assistantChainRun.getMessages().getLast();
+            log.debug("Orchestrator prompt: {}", prompt);
 
-            // Parse the JSON into a JsonNode
-            JsonNode jsonNode = objectMapper.readTree(responseJsonString);
+            // TODO Here I am forcing the orchestrator to make this tool call, ideally it should choose to do so.
 
-            // Extract the values
-            String response = jsonNode.get("response").asText();
-            String resultType = jsonNode.get("result_type").asText();
+            String responseJsonString = assistantService.processRequestForceToolCall(prompt, getAssistant(), context);
 
-            // Update statuses.
-            if (resultType.equals("USER_INFO")) {
-                orchestratorThread.setStatus(OrchestratorThreadStatus.USER_INFO);
-                assistantChainRun.setStatus(RunStatus.USER_ACTION);
-            } else if (resultType.equals("PLAN")) {
-                orchestratorThread.setStatus(OrchestratorThreadStatus.DONE);
-            } else {
-                throw new IllegalStateException("State should not be possible. Assistant ");
+            try {
+                // TODO Should be deserialized to a known entity made for this use case.
+
+                // Parse the JSON into a JsonNode
+                JsonNode jsonNode = objectMapper.readTree(responseJsonString);
+
+                // Extract the values
+                String response = jsonNode.get("response").asText();
+                String resultType = jsonNode.get("result_type").asText();
+
+                // Update statuses.
+                if (resultType.equals("USER_INFO")) {
+                    orchestratorThread.setStatus(OrchestratorThreadStatus.USER_INFO);
+                    assistantChainRun.setStatus(RunStatus.USER_ACTION);
+                } else if (resultType.equals("PLAN")) {
+                    orchestratorThread.setStatus(OrchestratorThreadStatus.DONE);
+                } else {
+                    throw new IllegalStateException("State should not be possible. Assistant ");
+                }
+
+                // Add the response to the list of messages.
+                assistantChainRun.addMessage(response);
+
+                // Return response to the system.
+                return response;
+
+            } catch (JsonProcessingException e) {
+                throw new RuntimeException("Error while parsing orchestrator response.", e);
             }
-
-            // Add the response to the list of messages.
-            assistantChainRun.addMessage(response);
-
-            // Return response to the system.
-            return response;
-
-        } catch (JsonProcessingException e) {
-            throw new RuntimeException("Error while parsing orchestrator response.", e);
+        } finally {
+            orchestratorThreadTL.remove();
         }
     }
 
@@ -189,7 +198,7 @@ public class OrchestratorLink implements AssistantChainLink<Assistant> {
         return stringBuilder.toString();
     }
 
-
+    // TODO Maybe I can instruct the assistant to give an object of key value pairs instead of a string.
     private static final String DATA_IDENTIFIER_TOOL_SCHEMA =
         """
             {
@@ -249,6 +258,9 @@ public class OrchestratorLink implements AssistantChainLink<Assistant> {
         return functionDefinitionsService.getSystemFunctionsNames();
     }
 
+
+    ThreadLocal<OrchestratorThread> orchestratorThreadTL = new ThreadLocal<>();
+
     private Function<ToolCallFunction, String> getEvaluateInformationFunction() {
         return toolCallFunction -> {
             try {
@@ -259,13 +271,23 @@ public class OrchestratorLink implements AssistantChainLink<Assistant> {
                 Map<String, Object> parsedParams = objectMapper.readValue(toolCallFunction.getArguments(), Map.class);
 
                 // Extract the "user_prompt" and "operations" from the map
-                String prompt = (String) parsedParams.get("user_prompt");
+                String user_prompt = (String) parsedParams.get("user_prompt");
                 List<String> operations = (List<String>) parsedParams.get("operations");
 
-                Map<String, String> result = evaluateInformation(prompt, operations);
+                OrchestratorThread orchestratorThread = orchestratorThreadTL.get();
+                if (orchestratorThread != null) {
 
-                // Return this as a JSON string using ObjectMapper
-                return objectMapper.writeValueAsString(result);
+                    // TODO It's a bit weird to do this here huh?
+                    orchestratorThread.addMessage(user_prompt);
+                    orchestratorThreadRepository.save(orchestratorThread);
+
+                    Map<String, String> result = evaluateInformation(orchestratorThread, operations);
+
+                    // Return this as a JSON string using ObjectMapper
+                    return objectMapper.writeValueAsString(result);
+                } else {
+                    throw new IllegalStateException("Should not be possible.");
+                }
 
             } catch (Exception e) {
                 log.error("Error while parsing functionParams: {}", toolCallFunction.getArguments(), e);
@@ -352,18 +374,18 @@ public class OrchestratorLink implements AssistantChainLink<Assistant> {
      * The prompt would hold the information the user has given.
      * Operations is the list of operations the orchestrator thinks need to be performed.
      */
-    private Map<String, String> evaluateInformation(String prompt, List<String> operations) throws AssistantFailedException {
+    private Map<String, String> evaluateInformation(OrchestratorThread orchestratorThread, List<String> operations) throws AssistantFailedException {
         Map<String, String> returnMap = new HashMap<>();
 
         // For each operation, I need to get the parameters.
         for (String operation : operations) {
-            String parameterDefinition = functionDefinitionsService.getParametersDefinition(operation);
+            String parameterDefinition = functionDefinitionsService.getParametersDefinition(operation, true);
+
+            // TODO from this parameterDefinition I need to replace the required fields with what's actually really required.
+
             if (parameterDefinition != null) {
 
-                // TODO This prompt has to have information about the user request.
-                //  We somehow need to collect what the user has given so far in the current orchestratorThread.
-
-                String finalPrompt = buildDataIdentifierEvaluationPrompt(prompt, parameterDefinition, operation);
+                String finalPrompt = buildDataIdentifierEvaluationPrompt(orchestratorThread.getUserMessages(), parameterDefinition, operation);
                 String assistantResponse = assistantService.processRequest(finalPrompt, getDataIdentifierAssistant());
 
                 // Parse the assistant response and populate the returnMap.
@@ -394,8 +416,8 @@ public class OrchestratorLink implements AssistantChainLink<Assistant> {
         return returnMap;
     }
 
-    private String buildDataIdentifierEvaluationPrompt(String prompt, String parameterDefinition, String operation) {
-        return "User given information: " + prompt + "\n" +
+    private String buildDataIdentifierEvaluationPrompt(List<String> userMessages, String parameterDefinition, String operation) {
+        return "User given information: " + userMessages + "\n" +
                 "System operation: " + operation + "\n" +
                 "Operation parameters schema: " + parameterDefinition;
     }
